@@ -1,0 +1,17 @@
+{
+	"name": "ms-scraping",
+	"version": "0.1.0",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "node --watch src/infra/server.js",
+		"start": "node src/infra/server.js",
+		"postinstall": "node ../../scripts/sync-prisma-client.js"
+	},
+	"dependencies": {
+		"@prisma/client": "^6.4.1",
+		"cheerio": "1.0.0-rc.12",
+		"dotenv": "^16.4.5",
+		"express": "^4.21.2"
+	}
+}
