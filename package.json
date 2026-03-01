@@ -4,7 +4,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"dev": "node --watch src/infra/server.js",
+		"dev": "node  src/infra/server.js",
 		"start": "node src/infra/server.js",
 		"postinstall": "node ../../scripts/sync-prisma-client.js"
 	},
