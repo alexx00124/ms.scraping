@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../adapters/prismaClient.js";
 import { PrismaJobRepository } from "../adapters/prismaJobRepository.js";
+import { PrismaScrapingSourceRepository } from "../adapters/prismaScrapingSourceRepository.js";
 import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 import { ScraperFactory } from "../adapters/scrapers/scraperFactory.js";
@@ -16,6 +17,7 @@ const app = express();
 app.use(express.json());
 
 const jobRepository = new PrismaJobRepository(prisma);
+const scrapingSourceRepository = new PrismaScrapingSourceRepository(prisma);
 const scraperFactory = new ScraperFactory();
 scraperFactory.register("indeed", new IndeedScraper());
 scraperFactory.register("linkedin", new LinkedinScraper());
@@ -25,7 +27,7 @@ scraperFactory.register("talent", new TalentScraper());
 
 const scrapingService = new ScrapingService(jobRepository, scraperFactory);
 
-app.use(buildRoutes(scrapingService));
+app.use(buildRoutes(scrapingService, scrapingSourceRepository));
 
 app.get("/health", (_req, res) => {
 	res.json({ ok: true, service: "ms-scraping" });
