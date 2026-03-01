@@ -2,6 +2,7 @@ import express from "express";
 import { prisma } from "../adapters/prismaClient.js";
 import { PrismaJobRepository } from "../adapters/prismaJobRepository.js";
 import { PrismaScrapingSourceRepository } from "../adapters/prismaScrapingSourceRepository.js";
+import { PrismaAcademicProgramRepository } from "../adapters/prismaAcademicProgramRepository.js";
 import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 import { ScraperFactory } from "../adapters/scrapers/scraperFactory.js";
@@ -18,6 +19,7 @@ app.use(express.json());
 
 const jobRepository = new PrismaJobRepository(prisma);
 const scrapingSourceRepository = new PrismaScrapingSourceRepository(prisma);
+const academicProgramRepository = new PrismaAcademicProgramRepository(prisma);
 const scraperFactory = new ScraperFactory();
 scraperFactory.register("indeed", new IndeedScraper());
 scraperFactory.register("linkedin", new LinkedinScraper());
@@ -25,7 +27,7 @@ scraperFactory.register("jooble", new JoobleScraper());
 scraperFactory.register("opcionempleo", new OpcionempleoScraper());
 scraperFactory.register("talent", new TalentScraper());
 
-const scrapingService = new ScrapingService(jobRepository, scraperFactory);
+const scrapingService = new ScrapingService(jobRepository, scraperFactory, academicProgramRepository);
 
 app.use(buildRoutes(scrapingService, scrapingSourceRepository));
 

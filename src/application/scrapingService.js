@@ -3,17 +3,33 @@ import {
 	SCRAPING_SOURCES,
 } from "../domain/scrapingSources.js";
 import { normalizeUrl } from "../domain/urlNormalization.js";
+import { matchJobToProgram } from "../domain/programMatcher.js";
 
 export class ScrapingService {
-	constructor(jobRepository, scraperFactory) {
+	constructor(jobRepository, scraperFactory, academicProgramRepository) {
 		this.jobRepository = jobRepository;
 		this.scraperFactory = scraperFactory;
+		this.academicProgramRepository = academicProgramRepository;
+		this.programs = [];
 		this.lastRun = {
 			status: "idle",
 			startedAt: null,
 			finishedAt: null,
 			totals: null,
 		};
+		
+		// Cargar programas activos al iniciar
+		this.loadPrograms();
+	}
+	
+	async loadPrograms() {
+		try {
+			this.programs = await this.academicProgramRepository.listActive();
+			console.log(`[ScrapingService] Cargados ${this.programs.length} programas académicos`);
+		} catch (error) {
+			console.error("[ScrapingService] Error cargando programas:", error.message);
+			this.programs = [];
+		}
 	}
 
 	async ingestOne(payload) {
@@ -96,7 +112,7 @@ export class ScrapingService {
 							continue;
 						}
 
-						const payload = toTrabajoPayload(details, sourceName);
+						const payload = toTrabajoPayload(details, sourceName, this.programs);
 						const candidates = [
 							payload.urlOriginal,
 							normalizeUrl(link),
@@ -194,15 +210,21 @@ const inferModalidad = (text) => {
 	return null;
 };
 
-const toTrabajoPayload = (details, sourceName) => {
+const toTrabajoPayload = (details, sourceName, programs) => {
 	const now = new Date();
 	const salary = parseSalaryRange(details.salary);
 	const rawUrl = details.url || details.link || details.urlOriginal;
 	const urlOriginal = normalizeUrl(rawUrl);
+	
+	const titulo = (details.title || details.titulo || "Sin titulo").trim();
+	const descripcion = (details.description || details.descripcion || "Sin descripcion").trim();
+	
+	// Calcular programa relacionado usando programMatcher
+	const programaRelacionado = matchJobToProgram(titulo, descripcion, programs);
 
 	return {
-		titulo: (details.title || details.titulo || "Sin titulo").trim(),
-		descripcion: (details.description || details.descripcion || "Sin descripcion").trim(),
+		titulo,
+		descripcion,
 		empresa: (details.company || details.empresa || "Empresa no especificada").trim(),
 		ubicacion: details.location || details.ubicacion || null,
 		modalidad: inferModalidad(`${details.location || ""} ${details.description || ""}`),
@@ -213,6 +235,7 @@ const toTrabajoPayload = (details, sourceName) => {
 		fuente: sourceName,
 		urlOriginal,
 		scrapingId: null,
+		programaRelacionado,
 		activo: true,
 		fechaCreacion: now,
 		actualizadoEn: now,
