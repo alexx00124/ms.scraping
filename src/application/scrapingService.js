@@ -4,6 +4,7 @@ import {
 } from "../domain/scrapingSources.js";
 import { normalizeUrl } from "../domain/urlNormalization.js";
 import { matchJobToProgram } from "../domain/programMatcher.js";
+import { areDuplicates } from "../domain/duplicateDetector.js";
 
 export class ScrapingService {
 	constructor(jobRepository, scraperFactory, academicProgramRepository) {
