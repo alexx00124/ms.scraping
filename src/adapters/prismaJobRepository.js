@@ -15,4 +15,23 @@ export class PrismaJobRepository {
 		});
 		return { count: result.count };
 	}
+
+	async findBySourceAndUrls(source, urls) {
+		const normalized = Array.from(
+			new Set(urls.filter((item) => typeof item === "string" && item.trim().length > 0)),
+		);
+
+		if (!source || normalized.length === 0) {
+			return null;
+		}
+
+		return this.prisma.trabajo.findFirst({
+			where: {
+				fuente: source,
+				urlOriginal: {
+					in: normalized,
+				},
+			},
+		});
+	}
 }

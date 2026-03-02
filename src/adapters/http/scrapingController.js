@@ -1,6 +1,12 @@
 import { buildError } from "../../domain/scrapingErrors.js";
 import { validateJobPayload, validateJobsPayload } from "../../domain/scrapingValidation.js";
 
+import {
+	validateJobPayload,
+	validateJobsPayload,
+	validateStartScrapingPayload,
+} from "../../domain/scrapingValidation.js";
+
 export const buildScrapingController = (scrapingService) => {
 	const ingestOne = async (req, res) => {
 		const validation = validateJobPayload(req.body);
@@ -39,6 +45,70 @@ export const buildScrapingController = (scrapingService) => {
 	};
 
 	return { ingestOne, ingestMany };
+
+	const start = async (req, res) => {
+		const validation = validateStartScrapingPayload(req.body);
+		if (validation) {
+			const error = buildError("INVALID_PAYLOAD", validation);
+			return res.status(error.httpStatus).json({ error });
+		}
+
+		const normalizedSources = req.body.sources?.map((item) => item.toLowerCase()) || null;
+		const available = scrapingService.getAvailableSources();
+		if (normalizedSources?.some((source) => !available.includes(source))) {
+			const error = buildError("SOURCE_NOT_AVAILABLE", {
+				sourcesDisponibles: available,
+			});
+			return res.status(error.httpStatus).json({ error });
+		}
+
+		// Construir lista de términos de búsqueda: keywords[] tiene prioridad, fallback a profession
+		const profession = req.body.profession?.trim() || null;
+		const keywords = Array.isArray(req.body.keywords)
+			? req.body.keywords.map((k) => k.trim()).filter(Boolean)
+			: [];
+
+		try {
+			const result = await scrapingService.startScraping({
+				profession,
+				keywords,
+				sources: normalizedSources,
+				linksPerSource: req.body.linksPerSource,
+			});
+
+			const label = profession || keywords.slice(0, 3).join(", ");
+			return res.status(200).json({
+				success: true,
+				message: `Scraping completado para "${label}".`,
+				data: result,
+			});
+		} catch (runError) {
+			const error = buildError("SCRAPING_FAILED", {
+				message: runError.message,
+			});
+			return res.status(error.httpStatus).json({ error });
+		}
+	};
+
+	const getSources = async (_req, res) => {
+		const sources = scrapingService.getAvailableSources();
+		return res.status(200).json({
+			success: true,
+			data: {
+				sources,
+				total: sources.length,
+			},
+		});
+	};
+
+	const getStatus = async (_req, res) => {
+		return res.status(200).json({
+			success: true,
+			data: scrapingService.getStatus(),
+		});
+	};
+
+	return { ingestOne, ingestMany, start, getSources, getStatus };
 };
 
 const mapPayload = (payload, isCreate) => ({
