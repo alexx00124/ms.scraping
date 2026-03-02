@@ -9,6 +9,13 @@ export class PrismaScrapingSourceRepository {
 		});
 	}
 
+	async listEnabled() {
+		return this.prisma.fuenteScraping.findMany({
+			where: { habilitada: true },
+			orderBy: { nombre: "asc" },
+		});
+	}
+
 	async findById(id) {
 		return this.prisma.fuenteScraping.findUnique({
 			where: { id: Number(id) },

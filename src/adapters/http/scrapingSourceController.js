@@ -24,11 +24,21 @@ const getUserIdFromHeaders = (req) => {
 };
 
 export const buildScrapingSourceController = (scrapingSourceRepository) => {
+	const serializeSource = (source) => ({
+		id: source.id,
+		nombre: source.nombre,
+		urlBase: source.urlBase,
+		habilitada: source.habilitada,
+		name: source.nombre,
+		baseUrl: source.urlBase,
+		isEnabled: source.habilitada,
+	});
+
 	const list = async (_req, res) => {
 		const sources = await scrapingSourceRepository.listAll();
 		return res.status(200).json({
 			success: true,
-			data: sources,
+			data: sources.map(serializeSource),
 		});
 	};
 
@@ -40,7 +50,7 @@ export const buildScrapingSourceController = (scrapingSourceRepository) => {
 		}
 		return res.status(200).json({
 			success: true,
-			data: source,
+			data: serializeSource(source),
 		});
 	};
 
@@ -66,7 +76,7 @@ export const buildScrapingSourceController = (scrapingSourceRepository) => {
 
 		return res.status(201).json({
 			success: true,
-			data: source,
+			data: serializeSource(source),
 		});
 	};
 
@@ -99,7 +109,7 @@ export const buildScrapingSourceController = (scrapingSourceRepository) => {
 
 		return res.status(200).json({
 			success: true,
-			data: source,
+			data: serializeSource(source),
 		});
 	};
 

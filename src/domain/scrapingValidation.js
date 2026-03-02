@@ -37,8 +37,19 @@ export const validateJobsPayload = (payload) => {
 export const validateStartScrapingPayload = (payload) => {
 	const details = {};
 
-	if (!hasText(payload?.profession)) {
-		details.profession = "profession es requerido.";
+	// Acepta profession (string) y/o keywords (array de strings)
+	const hasProfession = hasText(payload?.profession);
+	const hasKeywords =
+		Array.isArray(payload?.keywords) &&
+		payload.keywords.length > 0 &&
+		payload.keywords.every((k) => hasText(k));
+
+	if (!hasProfession && !hasKeywords) {
+		details.profession = "profession (string) o keywords (array de strings) es requerido.";
+	}
+
+	if (payload?.keywords !== undefined && !hasKeywords) {
+		details.keywords = "keywords debe ser un arreglo de strings no vacios.";
 	}
 
 	if (payload?.sources !== undefined) {

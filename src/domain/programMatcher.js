@@ -61,9 +61,9 @@ export const matchJobToProgram = (title, description, programs) => {
     }
   }
   
-  // Mínimo 2 keywords para considerarlo match válido
-  // Esto evita falsos positivos con términos muy genéricos
-  if (maxMatches >= 2) {
+  // Mínimo 1.5 para match válido (1 keyword en título = 1.5, o 2 en descripción = 2)
+  // Con keywords expandidos y específicos (cargos, sinónimos) se reduce el umbral
+  if (maxMatches >= 1.5) {
     return bestMatch;
   }
   

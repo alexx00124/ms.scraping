@@ -35,7 +35,12 @@ scraperFactory.register("elempleo", new ElEmpleoScraper());
 scraperFactory.register("computrabajo", new ComputrabajoScraper());
 scraperFactory.register("colombiatrabajos", new ColombiatrabajosScraper());
 
-const scrapingService = new ScrapingService(jobRepository, scraperFactory, academicProgramRepository);
+const scrapingService = new ScrapingService(
+	jobRepository,
+	scraperFactory,
+	academicProgramRepository,
+	scrapingSourceRepository,
+);
 
 app.use(buildRoutes(scrapingService, scrapingSourceRepository));
 

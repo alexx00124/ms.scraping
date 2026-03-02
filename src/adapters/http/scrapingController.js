@@ -58,16 +58,24 @@ export const buildScrapingController = (scrapingService) => {
 			return res.status(error.httpStatus).json({ error });
 		}
 
+		// Construir lista de términos de búsqueda: keywords[] tiene prioridad, fallback a profession
+		const profession = req.body.profession?.trim() || null;
+		const keywords = Array.isArray(req.body.keywords)
+			? req.body.keywords.map((k) => k.trim()).filter(Boolean)
+			: [];
+
 		try {
 			const result = await scrapingService.startScraping({
-				profession: req.body.profession.trim(),
+				profession,
+				keywords,
 				sources: normalizedSources,
 				linksPerSource: req.body.linksPerSource,
 			});
 
+			const label = profession || keywords.slice(0, 3).join(", ");
 			return res.status(200).json({
 				success: true,
-				message: `Scraping completado para \"${req.body.profession.trim()}\".`,
+				message: `Scraping completado para "${label}".`,
 				data: result,
 			});
 		} catch (runError) {
