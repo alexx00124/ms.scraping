@@ -11,6 +11,9 @@ import { LinkedinScraper } from "../adapters/scrapers/sites/linkedinScraper.js";
 import { JoobleScraper } from "../adapters/scrapers/sites/joobleScraper.js";
 import { OpcionempleoScraper } from "../adapters/scrapers/sites/opcionempleoScraper.js";
 import { TalentScraper } from "../adapters/scrapers/sites/talentScraper.js";
+import { ElEmpleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
+import { ComputrabajoScraper } from "../adapters/scrapers/sites/computrabajoScraper.js";
+import { ColombiatrabajosScraper } from "../adapters/scrapers/sites/colombiatrabajosScraper.js";
 
 const PORT = process.env.PORT || 6006;
 
@@ -21,11 +24,16 @@ const jobRepository = new PrismaJobRepository(prisma);
 const scrapingSourceRepository = new PrismaScrapingSourceRepository(prisma);
 const academicProgramRepository = new PrismaAcademicProgramRepository(prisma);
 const scraperFactory = new ScraperFactory();
+// Scrapers originales mejorados
 scraperFactory.register("indeed", new IndeedScraper());
 scraperFactory.register("linkedin", new LinkedinScraper());
 scraperFactory.register("jooble", new JoobleScraper());
 scraperFactory.register("opcionempleo", new OpcionempleoScraper());
 scraperFactory.register("talent", new TalentScraper());
+// Scrapers adicionales migrados desde feat/smart-search-by-career
+scraperFactory.register("elempleo", new ElEmpleoScraper());
+scraperFactory.register("computrabajo", new ComputrabajoScraper());
+scraperFactory.register("colombiatrabajos", new ColombiatrabajosScraper());
 
 const scrapingService = new ScrapingService(jobRepository, scraperFactory, academicProgramRepository);
 
