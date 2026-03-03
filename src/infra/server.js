@@ -43,6 +43,48 @@ const scrapingService = new ScrapingService(
 	scrapingSourceRepository,
 );
 
+const DEFAULT_SCRAPING_SOURCES = [
+	{ nombre: "Indeed", urlBase: "https://co.indeed.com" },
+	{ nombre: "LinkedIn", urlBase: "https://www.linkedin.com/jobs" },
+	{ nombre: "Jooble", urlBase: "https://co.jooble.org" },
+	{ nombre: "OpcionEmpleo", urlBase: "https://www.opcionempleo.com.co" },
+	{ nombre: "Talent", urlBase: "https://co.talent.com" },
+	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
+	{ nombre: "Computrabajo", urlBase: "https://co.computrabajo.com" },
+	{ nombre: "ColombiaTrabajos", urlBase: "https://www.colombiatrabajos.com.co" },
+];
+
+const ensureDefaultSources = async () => {
+	try {
+		const existing = await scrapingSourceRepository.listAll();
+		const existingNames = new Set(existing.map((source) => source.nombre));
+		const missing = DEFAULT_SCRAPING_SOURCES.filter(
+			(source) => !existingNames.has(source.nombre),
+		);
+
+		for (const source of missing) {
+			await scrapingSourceRepository.create({
+				nombre: source.nombre,
+				urlBase: source.urlBase,
+				habilitada: true,
+			});
+		}
+
+		if (missing.length > 0) {
+			console.log(
+				`[ms-scraping] Fuentes por defecto creadas: ${missing.length}`,
+			);
+		}
+	} catch (error) {
+		console.error(
+			"[ms-scraping] Error inicializando fuentes por defecto:",
+			error.message,
+		);
+	}
+};
+
+ensureDefaultSources();
+
 app.use(buildRoutes(scrapingService, scrapingSourceRepository));
 
 app.get("/health", (_req, res) => {

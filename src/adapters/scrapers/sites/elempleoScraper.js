@@ -85,9 +85,35 @@ export class ElEmpleoScraper extends ScraperProvider {
 				$("h1").first().text().trim() ||
 				"Sin titulo";
 
+			const descriptionFromHtml = normalizeText(
+				[
+					"div.description-block",
+					"div.description-block span",
+					".job-description",
+					".offer-description",
+					".js-joboffer-description",
+					"section.job-description",
+					"[itemprop='description']",
+					"[data-section='description']",
+				]
+					.map((selector) => $(selector).text())
+					.join(" "),
+			);
+
+			const descriptionFromJsonLd = normalizeText(extractJsonLdDescription($));
+			const descriptionFromMeta = normalizeText(
+				$("meta[property='og:description']").attr("content") ||
+					$("meta[name='description']").attr("content"),
+			);
+
+			const candidates = [
+				descriptionFromHtml,
+				descriptionFromJsonLd,
+				descriptionFromMeta,
+			].filter(Boolean);
+
 			const description =
-				$("div.description-block span").text().replace(/\s+/g, " ").trim() ||
-				$(".job-description").text().replace(/\s+/g, " ").trim() ||
+				candidates.find((candidate) => !isMaskedContactOnly(candidate)) ||
 				"Sin descripcion";
 
 			const company =
@@ -115,3 +141,38 @@ export class ElEmpleoScraper extends ScraperProvider {
 		return "elempleo";
 	}
 }
+
+const normalizeText = (value) =>
+	String(value || "")
+		.replace(/\s+/g, " ")
+		.trim();
+
+const extractJsonLdDescription = ($) => {
+	const scripts = $("script[type='application/ld+json']").toArray();
+	for (const script of scripts) {
+		const raw = $(script).html();
+		if (!raw) continue;
+		try {
+			const parsed = JSON.parse(raw);
+			const queue = Array.isArray(parsed) ? parsed : [parsed];
+			for (const item of queue) {
+				const description =
+					item?.description ||
+					item?.mainEntity?.description ||
+					item?.jobPosting?.description;
+				if (description) {
+					return description;
+				}
+			}
+		} catch {
+			continue;
+		}
+	}
+	return null;
+};
+
+const isMaskedContactOnly = (text) => {
+	const value = normalizeText(text).toLowerCase();
+	if (!value) return true;
+	return /^[*\s._-]+@[*\s._-]+\.[*\s._-]+$/.test(value);
+};

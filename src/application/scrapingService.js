@@ -6,12 +6,13 @@ import { normalizeUrl } from "../domain/urlNormalization.js";
 import { matchJobToProgram } from "../domain/programMatcher.js";
 import { areDuplicates } from "../domain/duplicateDetector.js";
 
-const MAX_SOURCES_PER_RUN = Number(process.env.SCRAPING_MAX_SOURCES || 5);
-const MAX_LINKS_PER_SOURCE = Number(process.env.SCRAPING_MAX_LINKS_PER_SOURCE || 4);
-const SOURCE_TIMEOUT_MS = Number(process.env.SCRAPING_SOURCE_TIMEOUT_MS || 12000);
-const DETAIL_TIMEOUT_MS = Number(process.env.SCRAPING_DETAIL_TIMEOUT_MS || 8000);
-const DETAIL_CONCURRENCY = Number(process.env.SCRAPING_DETAIL_CONCURRENCY || 3);
-const MAX_SEARCH_TERMS = Number(process.env.SCRAPING_MAX_SEARCH_TERMS || 4);
+const MAX_SOURCES_PER_RUN = Number(process.env.SCRAPING_MAX_SOURCES || 8);
+const MAX_LINKS_PER_SOURCE = Number(process.env.SCRAPING_MAX_LINKS_PER_SOURCE || 15);
+const SOURCE_TIMEOUT_MS = Number(process.env.SCRAPING_SOURCE_TIMEOUT_MS || 20000);
+const DETAIL_TIMEOUT_MS = Number(process.env.SCRAPING_DETAIL_TIMEOUT_MS || 12000);
+const DETAIL_CONCURRENCY = Number(process.env.SCRAPING_DETAIL_CONCURRENCY || 5);
+const DETAIL_RETRY_ATTEMPTS = Number(process.env.SCRAPING_DETAIL_RETRY_ATTEMPTS || 2);
+const MAX_SEARCH_TERMS = Number(process.env.SCRAPING_MAX_SEARCH_TERMS || 6);
 
 export class ScrapingService {
 	constructor(
@@ -148,11 +149,26 @@ export class ScrapingService {
 
 					await runWithConcurrency(newLinks, DETAIL_CONCURRENCY, async (link) => {
 						try {
-							const details = await withTimeout(
-								scraper.extractJobDetails(link),
-								DETAIL_TIMEOUT_MS,
-								`Timeout extrayendo detalle en ${sourceName}`,
-							);
+							let details = null;
+							for (let attempt = 1; attempt <= DETAIL_RETRY_ATTEMPTS; attempt++) {
+								details = await withTimeout(
+									scraper.extractJobDetails(link),
+									DETAIL_TIMEOUT_MS,
+									`Timeout extrayendo detalle en ${sourceName}`,
+								);
+								if (!details) {
+									continue;
+								}
+
+								if (hasMeaningfulDescription(details)) {
+									break;
+								}
+
+								if (attempt < DETAIL_RETRY_ATTEMPTS) {
+									await delay(250 * attempt);
+								}
+							}
+
 							if (!details) {
 								metrics.failed += 1;
 								return;
@@ -307,6 +323,21 @@ const withTimeout = async (promise, timeoutMs, message) => {
 	} finally {
 		clearTimeout(timeoutId);
 	}
+};
+
+const delay = (ms) =>
+	new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+
+const hasMeaningfulDescription = (details) => {
+	if (!details) return false;
+	const raw = details.description || details.descripcion;
+	if (!raw) return false;
+	const normalized = String(raw).trim().toLowerCase();
+	if (!normalized) return false;
+	if (normalized === "sin descripcion") return false;
+	return normalized.length >= 40;
 };
 
 const runWithConcurrency = async (items, concurrency, worker) => {

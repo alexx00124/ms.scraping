@@ -68,12 +68,36 @@ export class TalentScraper extends ScraperProvider {
 				$('meta[property="og:title"]').attr("content") ||
 				"Sin titulo";
 
-			const description =
-				$(".card__job-description, .job__description, #job-description, .description")
-					.text()
-					.replace(/\s+/g, " ")
-					.trim() ||
+			const descriptionFromHeading = normalizeText(extractDescriptionByHeading($));
+
+			const descriptionFromSelectors = normalizeText(
+				[
+					".card__job-description",
+					".job__description",
+					"#job-description",
+					".description",
+					".job-description",
+					".job-details-description",
+					"[itemprop='description']",
+				]
+					.map((selector) => $(selector).text())
+					.join(" "),
+			);
+
+			const descriptionFromHtml = normalizeText(
+				[descriptionFromHeading, descriptionFromSelectors].filter(Boolean).join(" "),
+			);
+
+			const descriptionFromJsonLd = normalizeText(extractJsonLdDescription($));
+			const descriptionFromMeta = normalizeText(
 				$('meta[property="og:description"]').attr("content") ||
+					$("meta[name='description']").attr("content"),
+			);
+
+			const description =
+				descriptionFromHtml ||
+				descriptionFromJsonLd ||
+				descriptionFromMeta ||
 				"Sin descripcion";
 
 			const company =
@@ -115,3 +139,58 @@ export class TalentScraper extends ScraperProvider {
 		return "talent";
 	}
 }
+
+const normalizeText = (value) =>
+	String(value || "")
+		.replace(/\s+/g, " ")
+		.trim();
+
+const extractJsonLdDescription = ($) => {
+	const scripts = $("script[type='application/ld+json']").toArray();
+	for (const script of scripts) {
+		const raw = $(script).html();
+		if (!raw) continue;
+		try {
+			const parsed = JSON.parse(raw);
+			const queue = Array.isArray(parsed) ? parsed : [parsed];
+			for (const item of queue) {
+				const description =
+					item?.description ||
+					item?.mainEntity?.description ||
+					item?.jobPosting?.description;
+				if (description) {
+					return description;
+				}
+			}
+		} catch {
+			continue;
+		}
+	}
+	return null;
+};
+
+const extractDescriptionByHeading = ($) => {
+	const headingNodes = $("span, h2, h3, strong").toArray();
+	for (const node of headingNodes) {
+		const headingText = normalizeText($(node).text()).toLowerCase();
+		if (
+			headingText !== "job description" &&
+			headingText !== "description" &&
+			headingText !== "descripción del cargo"
+		) {
+			continue;
+		}
+
+		const nextDivText = normalizeText($(node).next("div").text());
+		if (nextDivText.length > 120) {
+			return nextDivText;
+		}
+
+		const parentDivText = normalizeText($(node).parent().children("div").first().text());
+		if (parentDivText.length > 120) {
+			return parentDivText;
+		}
+	}
+
+	return null;
+};
