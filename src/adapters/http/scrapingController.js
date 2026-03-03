@@ -1,6 +1,4 @@
 import { buildError } from "../../domain/scrapingErrors.js";
-import { validateJobPayload, validateJobsPayload } from "../../domain/scrapingValidation.js";
-
 import {
 	validateJobPayload,
 	validateJobsPayload,
@@ -43,8 +41,6 @@ export const buildScrapingController = (scrapingService) => {
 		const result = await scrapingService.ingestMany(mapped);
 		return res.status(201).json({ inserted: result.count });
 	};
-
-	return { ingestOne, ingestMany };
 
 	const start = async (req, res) => {
 		const validation = validateStartScrapingPayload(req.body);
