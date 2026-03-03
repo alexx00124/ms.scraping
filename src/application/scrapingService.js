@@ -1,7 +1,3 @@
-export class ScrapingService {
-	constructor(jobRepository) {
-		this.jobRepository = jobRepository;
-
 import {
 	DEFAULT_LINKS_PER_SOURCE,
 	SCRAPING_SOURCES,
@@ -57,7 +53,6 @@ export class ScrapingService {
 	async ingestMany(items) {
 		return this.jobRepository.createMany(items);
 	}
-}
 
 	getAvailableSources() {
 		return this.scraperFactory.getAvailableSources();
