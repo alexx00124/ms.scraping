@@ -20,54 +20,51 @@ export const matchJobToProgram = (title, description, programs) => {
   if (!title || !programs || programs.length === 0) {
     return null;
   }
-  
-  const titleLower = title.toLowerCase();
-  const descLower = (description || '').toLowerCase();
-  const combinedText = `${titleLower} ${descLower}`;
-  
-  let bestMatch = null;
-  let maxMatches = 0;
-  
+
+  const titleText = normalizeText(title);
+  const descText = normalizeText(description || '');
+
+  const candidates = [];
+
   for (const program of programs) {
-    // Saltar programas sin keywords o inactivos
-    if (!program.keywords || program.keywords.length === 0) {
+    if (!Array.isArray(program?.keywords) || program.keywords.length === 0) {
       continue;
     }
-    
+
     if (program.activo === false) {
       continue;
     }
-    
-    let matches = 0;
-    
-    // Contar cuántas keywords del programa aparecen en el job
-    for (const keyword of program.keywords) {
-      const keywordLower = keyword.toLowerCase();
-      
-      if (combinedText.includes(keywordLower)) {
-        matches++;
-        
-        // Bonus si aparece en el título (más relevante)
-        if (titleLower.includes(keywordLower)) {
-          matches += 0.5;
-        }
-      }
-    }
-    
-    // Actualizar mejor match si este programa tiene más coincidencias
-    if (matches > maxMatches) {
-      maxMatches = matches;
-      bestMatch = program.nombre;
-    }
+
+    const score = computeProgramScore(titleText, descText, program.keywords);
+    candidates.push({
+      name: program.nombre,
+      score: score.total,
+      titleHits: score.titleHits,
+      descriptionHits: score.descriptionHits,
+    });
   }
-  
-  // Mínimo 1.5 para match válido (1 keyword en título = 1.5, o 2 en descripción = 2)
-  // Con keywords expandidos y específicos (cargos, sinónimos) se reduce el umbral
-  if (maxMatches >= 1.5) {
-    return bestMatch;
+
+  if (!candidates.length) {
+    return null;
   }
-  
-  return null;
+
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  const second = candidates[1] || { score: 0 };
+
+  const hasMinimumEvidence =
+    best.score >= 2.4 &&
+    (best.titleHits >= 1 || best.descriptionHits >= 2);
+  if (!hasMinimumEvidence) {
+    return null;
+  }
+
+  const ambiguityMargin = best.score - second.score;
+  if (ambiguityMargin < 0.8) {
+    return null;
+  }
+
+  return best.name;
 };
 
 /**
@@ -79,32 +76,65 @@ export const matchJobToProgram = (title, description, programs) => {
  * @returns {number} - Score de 0 a 100
  */
 export const calculateCompatibilityScore = (title, description, program) => {
-  if (!title || !program || !program.keywords || program.keywords.length === 0) {
+  if (!title || !program || !Array.isArray(program.keywords) || program.keywords.length === 0) {
     return 0;
   }
-  
-  const titleLower = title.toLowerCase();
-  const descLower = (description || '').toLowerCase();
-  const combinedText = `${titleLower} ${descLower}`;
-  
-  let matchedKeywords = 0;
-  
-  for (const keyword of program.keywords) {
-    const keywordLower = keyword.toLowerCase();
-    
-    if (combinedText.includes(keywordLower)) {
-      matchedKeywords++;
-      
-      // Bonus por aparecer en título
-      if (titleLower.includes(keywordLower)) {
-        matchedKeywords += 0.5;
-      }
-    }
-  }
-  
-  // Calcular porcentaje basado en keywords totales del programa
-  const percentage = (matchedKeywords / program.keywords.length) * 100;
-  
-  // Cap al 100%
+
+  const titleText = normalizeText(title);
+  const descText = normalizeText(description || '');
+  const score = computeProgramScore(titleText, descText, program.keywords);
+  const maxPossible = program.keywords.length * 1.5;
+  const percentage = maxPossible > 0 ? (score.total / maxPossible) * 100 : 0;
+
   return Math.min(Math.round(percentage), 100);
 };
+
+const computeProgramScore = (titleText, descriptionText, keywords) => {
+  let titleHits = 0;
+  let descriptionHits = 0;
+  let total = 0;
+
+  for (const rawKeyword of keywords) {
+    const keyword = normalizeText(rawKeyword);
+    if (!keyword || keyword.length < 3) {
+      continue;
+    }
+
+    const escapedKeyword = escapeRegex(keyword);
+    const keywordPattern = new RegExp(`(^|\\b)${escapedKeyword}(\\b|$)`, 'i');
+
+    const inTitle = keywordPattern.test(titleText);
+    const inDescription = keywordPattern.test(descriptionText);
+
+    if (!inTitle && !inDescription) {
+      continue;
+    }
+
+    const keywordWeight = keyword.includes(' ') ? 1.15 : 1;
+    if (inDescription) {
+      descriptionHits += 1;
+      total += 1 * keywordWeight;
+    }
+
+    if (inTitle) {
+      titleHits += 1;
+      total += 0.55 * keywordWeight;
+    }
+  }
+
+  return {
+    total,
+    titleHits,
+    descriptionHits,
+  };
+};
+
+const normalizeText = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
