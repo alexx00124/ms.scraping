@@ -384,19 +384,45 @@ const inferModalidad = (text) => {
 		return null;
 	}
 
-	const normalized = text.toLowerCase();
-	if (normalized.includes("hibrid")) {
+	const normalized = normalizeSearchText(text);
+	if (
+		normalized.includes("hibrid") ||
+		normalized.includes("hybrid") ||
+		normalized.includes("mixto") ||
+		normalized.includes("semi presencial")
+	) {
 		return "HIBRIDO";
 	}
-	if (normalized.includes("remoto") || normalized.includes("remote")) {
+	if (
+		normalized.includes("remoto") ||
+		normalized.includes("remote") ||
+		normalized.includes("teletrabajo") ||
+		normalized.includes("home office") ||
+		normalized.includes("work from home") ||
+		normalized.includes("wfh") ||
+		normalized.includes("virtual")
+	) {
 		return "REMOTO";
 	}
-	if (normalized.includes("presencial")) {
+	if (
+		normalized.includes("presencial") ||
+		normalized.includes("onsite") ||
+		normalized.includes("on site") ||
+		normalized.includes("en oficina")
+	) {
 		return "PRESENCIAL";
 	}
 
 	return null;
 };
+
+const normalizeSearchText = (value) =>
+	String(value || "")
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
 
 const toTrabajoPayload = (details, sourceName, programs) => {
 	const now = new Date();
