@@ -64,26 +64,31 @@ export const buildScrapingController = (scrapingService) => {
 			? req.body.keywords.map((k) => k.trim()).filter(Boolean)
 			: [];
 
-		try {
-			const result = await scrapingService.startScraping({
+		const label = profession || keywords.slice(0, 3).join(", ");
+
+		// Responder inmediatamente: el scraping puede tardar minutos (429, rate-limit).
+		// El cliente no debe esperar — recibe 202 y el proceso corre en background.
+		res.status(202).json({
+			success: true,
+			message: `Scraping iniciado para "${label}". Las ofertas se actualizarán en unos momentos.`,
+			data: null,
+		});
+
+		// Ejecutar en background sin bloquear la respuesta
+		scrapingService
+			.startScraping({
 				profession,
 				keywords,
 				sources: normalizedSources,
 				linksPerSource: req.body.linksPerSource,
+			})
+			.then((result) => {
+				const total = result?.inserted ?? result?.count ?? "?";
+				console.log(`[SCRAPING] ✅ Background completado para "${label}" — ${total} ofertas insertadas.`);
+			})
+			.catch((runError) => {
+				console.error(`[SCRAPING] ❌ Background fallido para "${label}":`, runError.message);
 			});
-
-			const label = profession || keywords.slice(0, 3).join(", ");
-			return res.status(200).json({
-				success: true,
-				message: `Scraping completado para "${label}".`,
-				data: result,
-			});
-		} catch (runError) {
-			const error = buildError("SCRAPING_FAILED", {
-				message: runError.message,
-			});
-			return res.status(error.httpStatus).json({ error });
-		}
 	};
 
 	const getSources = async (_req, res) => {
