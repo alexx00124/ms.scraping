@@ -6,13 +6,14 @@ import { normalizeUrl } from "../domain/urlNormalization.js";
 import { matchJobToProgram } from "../domain/programMatcher.js";
 import { areDuplicates } from "../domain/duplicateDetector.js";
 
-const MAX_SOURCES_PER_RUN = Number(process.env.SCRAPING_MAX_SOURCES || 8);
-const MAX_LINKS_PER_SOURCE = Number(process.env.SCRAPING_MAX_LINKS_PER_SOURCE || 15);
-const SOURCE_TIMEOUT_MS = Number(process.env.SCRAPING_SOURCE_TIMEOUT_MS || 20000);
-const DETAIL_TIMEOUT_MS = Number(process.env.SCRAPING_DETAIL_TIMEOUT_MS || 12000);
-const DETAIL_CONCURRENCY = Number(process.env.SCRAPING_DETAIL_CONCURRENCY || 5);
-const DETAIL_RETRY_ATTEMPTS = Number(process.env.SCRAPING_DETAIL_RETRY_ATTEMPTS || 2);
-const MAX_SEARCH_TERMS = Number(process.env.SCRAPING_MAX_SEARCH_TERMS || 6);
+const MAX_SOURCES_PER_RUN = Number(process.env.SCRAPING_MAX_SOURCES || 4);
+const MAX_LINKS_PER_SOURCE = Number(process.env.SCRAPING_MAX_LINKS_PER_SOURCE || 8);
+const SOURCE_TIMEOUT_MS = Number(process.env.SCRAPING_SOURCE_TIMEOUT_MS || 12000);
+const DETAIL_TIMEOUT_MS = Number(process.env.SCRAPING_DETAIL_TIMEOUT_MS || 7000);
+const DETAIL_CONCURRENCY = Number(process.env.SCRAPING_DETAIL_CONCURRENCY || 4);
+const DETAIL_RETRY_ATTEMPTS = Number(process.env.SCRAPING_DETAIL_RETRY_ATTEMPTS || 1);
+const MAX_SEARCH_TERMS = Number(process.env.SCRAPING_MAX_SEARCH_TERMS || 4);
+const MAX_DURATION_MS = Number(process.env.SCRAPING_MAX_DURATION_MS || 70000);
 
 export class ScrapingService {
 	constructor(
@@ -68,6 +69,9 @@ export class ScrapingService {
 
 	async startScraping({ profession, keywords = [], sources, linksPerSource }) {
 		const selectedSources = await this.resolveSources(sources);
+		const startedAt = new Date();
+		const deadlineAt = Date.now() + Math.max(15000, MAX_DURATION_MS);
+		const isExpired = () => Date.now() >= deadlineAt;
 
 		// Construir lista de términos de búsqueda
 		// Prioridad: keywords[] > profession (retrocompatible)
@@ -79,7 +83,6 @@ export class ScrapingService {
 		// Repartir el budget de links entre los términos de búsqueda
 		const linksPerTermPerSource = Math.max(1, Math.ceil(perSourceLimit / searchTerms.length));
 
-		const startedAt = new Date();
 		this.lastRun = {
 			status: "running",
 			startedAt,
@@ -95,6 +98,7 @@ export class ScrapingService {
 			totalInserted: 0,
 			totalSkipped: 0,
 			totalFailed: 0,
+			timedOut: false,
 			sources: {},
 		};
 
@@ -130,10 +134,21 @@ export class ScrapingService {
 
 			// Iterar sobre cada término de búsqueda para esta fuente
 			for (const term of searchTerms) {
+				if (isExpired()) {
+					metrics.success = false;
+					metrics.errors.push("Tiempo máximo alcanzado para esta ejecución");
+					response.timedOut = true;
+					break;
+				}
+
 				try {
+					const sourceTimeout = Math.min(
+						SOURCE_TIMEOUT_MS,
+						getRemainingTime(deadlineAt, SOURCE_TIMEOUT_MS),
+					);
 					const links = await withTimeout(
 						scraper.extractJobLinks(term, linksPerTermPerSource),
-						SOURCE_TIMEOUT_MS,
+						sourceTimeout,
 						`Timeout extrayendo links en ${sourceName} para "${term}"`,
 					);
 
@@ -148,12 +163,26 @@ export class ScrapingService {
 					metrics.links += newLinks.length;
 
 					await runWithConcurrency(newLinks, DETAIL_CONCURRENCY, async (link) => {
+						if (isExpired()) {
+							response.timedOut = true;
+							return;
+						}
+
 						try {
 							let details = null;
 							for (let attempt = 1; attempt <= DETAIL_RETRY_ATTEMPTS; attempt++) {
+								if (isExpired()) {
+									response.timedOut = true;
+									break;
+								}
+
+								const detailTimeout = Math.min(
+									DETAIL_TIMEOUT_MS,
+									getRemainingTime(deadlineAt, DETAIL_TIMEOUT_MS),
+								);
 								details = await withTimeout(
 									scraper.extractJobDetails(link),
-									DETAIL_TIMEOUT_MS,
+									detailTimeout,
 									`Timeout extrayendo detalle en ${sourceName}`,
 								);
 								if (!details) {
@@ -170,6 +199,10 @@ export class ScrapingService {
 							}
 
 							if (!details) {
+								if (response.timedOut) {
+									metrics.skipped += 1;
+									return;
+								}
 								metrics.failed += 1;
 								return;
 							}
@@ -193,10 +226,15 @@ export class ScrapingService {
 							await this.jobRepository.create(payload);
 							metrics.inserted += 1;
 						} catch (error) {
+							if (isExpired()) {
+								response.timedOut = true;
+								metrics.skipped += 1;
+								return;
+							}
 							metrics.failed += 1;
 							metrics.errors.push(error.message);
 						}
-					});
+					}, () => isExpired());
 				} catch (error) {
 					metrics.errors.push(`[${term}] ${error.message}`);
 				}
@@ -224,6 +262,7 @@ export class ScrapingService {
 				inserted: response.totalInserted,
 				skipped: response.totalSkipped,
 				failed: response.totalFailed,
+				timedOut: response.timedOut,
 			},
 		};
 
@@ -340,10 +379,14 @@ const hasMeaningfulDescription = (details) => {
 	return normalized.length >= 40;
 };
 
-const runWithConcurrency = async (items, concurrency, worker) => {
+const runWithConcurrency = async (items, concurrency, worker, shouldStop = null) => {
 	const queue = [...items];
 	const runners = Array.from({ length: Math.max(1, concurrency) }, async () => {
 		while (queue.length > 0) {
+			if (typeof shouldStop === "function" && shouldStop()) {
+				return;
+			}
+
 			const item = queue.shift();
 			if (item === undefined) {
 				return;
@@ -352,6 +395,14 @@ const runWithConcurrency = async (items, concurrency, worker) => {
 		}
 	});
 	await Promise.all(runners);
+};
+
+const getRemainingTime = (deadlineAt, fallbackMs) => {
+	const remaining = deadlineAt - Date.now();
+	if (!Number.isFinite(remaining) || remaining <= 0) {
+		return 1;
+	}
+	return Math.max(1, Math.min(remaining, fallbackMs));
 };
 
 const parseSalaryRange = (salaryText) => {
