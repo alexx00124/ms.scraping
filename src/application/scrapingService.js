@@ -87,6 +87,7 @@ export class ScrapingService {
 			status: "running",
 			startedAt,
 			finishedAt: null,
+			insertedSoFar: 0,
 			totals: null,
 		};
 
@@ -225,6 +226,7 @@ export class ScrapingService {
 
 							await this.jobRepository.create(payload);
 							metrics.inserted += 1;
+							this.lastRun.insertedSoFar += 1;
 						} catch (error) {
 							if (isExpired()) {
 								response.timedOut = true;
