@@ -1,8 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { prisma } from "../adapters/prismaClient.js";
-import { PrismaJobRepository } from "../adapters/prismaJobRepository.js";
-import { PrismaAcademicProgramRepository } from "../adapters/prismaAcademicProgramRepository.js";
+import { HttpJobsClient } from "../adapters/httpJobsClient.js";
 import { PrismaScrapingSourceRepository } from "../adapters/prismaScrapingSourceRepository.js";
 import { ScraperFactory } from "../adapters/scrapers/scraperFactory.js";
 import { ScrapingService } from "../application/scrapingService.js";
@@ -22,8 +21,14 @@ const PORT = process.env.PORT || 6006;
 const app = express();
 app.use(express.json());
 
-const jobRepository = new PrismaJobRepository(prisma);
-const academicProgramRepository = new PrismaAcademicProgramRepository(prisma);
+const httpJobsClient = new HttpJobsClient();
+const jobRepository = httpJobsClient; // Job ingestion via ms-jobs API
+const academicProgramRepository = {
+	listActive: () => httpJobsClient.listActivePrograms(),
+	listAll: () => httpJobsClient.listAllPrograms(),
+	findById: (id) => httpJobsClient.findProgramById(id),
+	findByName: (name) => httpJobsClient.findProgramByName(name),
+};
 const scrapingSourceRepository = new PrismaScrapingSourceRepository(prisma);
 
 const scraperFactory = new ScraperFactory();

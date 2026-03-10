@@ -1,0 +1,26 @@
+// ─── ms-scraping: Bounded Context — Scraping de Ofertas ─────────────────────
+// Ownership: FuenteScraping
+// NOTA: Este servicio escribe en Trabajo (ms-jobs) vía API HTTP, no directamente en DB.
+//       El schema solo contiene las tablas que este servicio POSEE.
+
+generator client {
+	provider      = "prisma-client-js"
+	output        = "../node_modules/.prisma/client"
+	binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+	provider = "postgresql"
+	url      = env("DATABASE_URL")
+}
+
+model FuenteScraping {
+	id          Int      @id @default(autoincrement())
+	nombre      String   @unique
+	urlBase     String   @map("url_base")
+	habilitada  Boolean  @default(true)
+	creadoEn    DateTime @default(now()) @map("creado_en")
+	actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+	@@map("fuentes_scraping")
+}
