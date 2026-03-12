@@ -7,14 +7,8 @@ import { ScraperFactory } from "../adapters/scrapers/scraperFactory.js";
 import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
-import { ComputrabajoScraper } from "../adapters/scrapers/sites/computrabajoScraper.js";
-import { ElEmpleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
-import { IndeedScraper } from "../adapters/scrapers/sites/indeedScraper.js";
-import { JoobleScraper } from "../adapters/scrapers/sites/joobleScraper.js";
-import { LinkedinScraper } from "../adapters/scrapers/sites/linkedinScraper.js";
-import { OpcionempleoScraper } from "../adapters/scrapers/sites/opcionempleoScraper.js";
-import { TalentScraper } from "../adapters/scrapers/sites/talentScraper.js";
-import { ColombiatrabajosScraper } from "../adapters/scrapers/sites/colombiatrabajosScraper.js";
+import { AcciontrabajoScraper } from "../adapters/scrapers/sites/acciontrabajoScraper.js";
+import { FaciltrabajoScraper } from "../adapters/scrapers/sites/faciltrabajoScraper.js";
 
 const PORT = process.env.PORT || 6006;
 
@@ -32,14 +26,8 @@ const academicProgramRepository = {
 const scrapingSourceRepository = new PrismaScrapingSourceRepository(prisma);
 
 const scraperFactory = new ScraperFactory();
-scraperFactory.register("computrabajo", new ComputrabajoScraper());
-scraperFactory.register("elempleo", new ElEmpleoScraper());
-scraperFactory.register("indeed", new IndeedScraper());
-scraperFactory.register("jooble", new JoobleScraper());
-scraperFactory.register("linkedin", new LinkedinScraper());
-scraperFactory.register("opcionempleo", new OpcionempleoScraper());
-scraperFactory.register("talent", new TalentScraper());
-scraperFactory.register("colombiatrabajos", new ColombiatrabajosScraper());
+scraperFactory.register("acciontrabajo", new AcciontrabajoScraper());
+scraperFactory.register("faciltrabajo", new FaciltrabajoScraper());
 
 const scrapingService = new ScrapingService(
 	jobRepository,
@@ -49,22 +37,25 @@ const scrapingService = new ScrapingService(
 );
 
 const DEFAULT_SCRAPING_SOURCES = [
-	{ nombre: "Indeed", urlBase: "https://co.indeed.com" },
-	{ nombre: "LinkedIn", urlBase: "https://www.linkedin.com/jobs" },
-	{ nombre: "Jooble", urlBase: "https://co.jooble.org" },
-	{ nombre: "OpcionEmpleo", urlBase: "https://www.opcionempleo.com.co" },
-	{ nombre: "Talent", urlBase: "https://co.talent.com" },
-	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
-	{ nombre: "Computrabajo", urlBase: "https://co.computrabajo.com" },
-	{ nombre: "ColombiaTrabajos", urlBase: "https://www.colombiatrabajos.com.co" },
+	{ nombre: "AccionTrabajo", urlBase: "https://col.acciontrabajo.com" },
+	{ nombre: "FacilTrabajo", urlBase: "https://www.faciltrabajo.com.co" },
 ];
 
 const ensureDefaultSources = async () => {
 	try {
 		const existing = await scrapingSourceRepository.listAll();
-		const existingNames = new Set(existing.map((source) => source.nombre));
+		const existingNames = new Set(
+			existing.map((source) => normalizeSourceName(source.nombre)),
+		);
 		const missing = DEFAULT_SCRAPING_SOURCES.filter(
-			(source) => !existingNames.has(source.nombre),
+			(source) => !existingNames.has(normalizeSourceName(source.nombre)),
+		);
+
+		const defaultNames = new Set(
+			DEFAULT_SCRAPING_SOURCES.map((source) => normalizeSourceName(source.nombre)),
+		);
+		const stale = existing.filter(
+			(source) => !defaultNames.has(normalizeSourceName(source.nombre)),
 		);
 
 		for (const source of missing) {
@@ -80,6 +71,17 @@ const ensureDefaultSources = async () => {
 				`[ms-scraping] Fuentes por defecto creadas: ${missing.length}`,
 			);
 		}
+
+		for (const source of stale) {
+			if (!source.habilitada) continue;
+			await scrapingSourceRepository.updateById(source.id, { habilitada: false });
+		}
+
+		if (stale.length > 0) {
+			console.log(
+				`[ms-scraping] Fuentes anteriores deshabilitadas: ${stale.length}`,
+			);
+		}
 	} catch (error) {
 		console.error(
 			"[ms-scraping] Error inicializando fuentes por defecto:",
@@ -89,6 +91,10 @@ const ensureDefaultSources = async () => {
 };
 
 ensureDefaultSources();
+
+function normalizeSourceName(name) {
+	return String(name || "").trim().toLowerCase();
+}
 
 app.use(buildRoutes(scrapingService, scrapingSourceRepository));
 
