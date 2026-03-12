@@ -43,6 +43,12 @@ export const buildScrapingController = (scrapingService) => {
 	};
 
 	const start = async (req, res) => {
+		const profession = req.body.profession?.trim() || null;
+		const keywords = Array.isArray(req.body.keywords)
+			? req.body.keywords.map((k) => k.trim()).filter(Boolean)
+			: [];
+		const allPrograms = req.body.allPrograms === true;
+
 		const validation = validateStartScrapingPayload(req.body);
 		if (validation) {
 			const error = buildError("INVALID_PAYLOAD", validation);
@@ -58,13 +64,9 @@ export const buildScrapingController = (scrapingService) => {
 			return res.status(error.httpStatus).json({ error });
 		}
 
-		// Construir lista de términos de búsqueda: keywords[] tiene prioridad, fallback a profession
-		const profession = req.body.profession?.trim() || null;
-		const keywords = Array.isArray(req.body.keywords)
-			? req.body.keywords.map((k) => k.trim()).filter(Boolean)
-			: [];
-
-		const label = profession || keywords.slice(0, 3).join(", ");
+		const label = allPrograms
+			? "todas las carreras UDC"
+			: profession || keywords.slice(0, 3).join(", ");
 
 		// Responder inmediatamente: el scraping puede tardar minutos (429, rate-limit).
 		// El cliente no debe esperar — recibe 202 y el proceso corre en background.
@@ -79,6 +81,7 @@ export const buildScrapingController = (scrapingService) => {
 			.startScraping({
 				profession,
 				keywords,
+				allPrograms,
 				sources: normalizedSources,
 				linksPerSource: req.body.linksPerSource,
 			})

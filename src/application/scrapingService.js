@@ -67,7 +67,17 @@ export class ScrapingService {
 		};
 	}
 
-	async startScraping({ profession, keywords = [], sources, linksPerSource }) {
+	async startScraping({
+		profession,
+		keywords = [],
+		sources,
+		linksPerSource,
+		allPrograms = false,
+	}) {
+		if (allPrograms) {
+			return this.startScrapingAllPrograms({ sources, linksPerSource });
+		}
+
 		const selectedSources = await this.resolveSources(sources);
 		const startedAt = new Date();
 		const deadlineAt = Date.now() + Math.max(15000, MAX_DURATION_MS);
@@ -274,6 +284,103 @@ export class ScrapingService {
 		};
 	}
 
+	async startScrapingAllPrograms({ sources, linksPerSource }) {
+		if (!Array.isArray(this.programs) || this.programs.length === 0) {
+			await this.loadPrograms();
+		}
+
+		const activePrograms = dedupeProgramsByName(this.programs).filter(
+			(program) => program?.activo !== false,
+		);
+
+		const startedAt = new Date();
+		const response = {
+			profession: "all-programs",
+			searchTerms: activePrograms.map((program) => program.nombre),
+			startedAt,
+			totalLinks: 0,
+			totalInserted: 0,
+			totalSkipped: 0,
+			totalFailed: 0,
+			timedOut: false,
+			sources: {},
+			programsProcessed: 0,
+			programsTotal: activePrograms.length,
+		};
+
+		this.lastRun = {
+			status: "running",
+			startedAt,
+			finishedAt: null,
+			insertedSoFar: 0,
+			totals: null,
+		};
+
+		for (const program of activePrograms) {
+			try {
+				const result = await this.startScraping({
+					profession: program.nombre,
+					keywords: Array.isArray(program.keywords) ? program.keywords : [],
+					sources,
+					linksPerSource,
+					allPrograms: false,
+				});
+
+				response.totalLinks += result.totalLinks || 0;
+				response.totalInserted += result.totalInserted || 0;
+				response.totalSkipped += result.totalSkipped || 0;
+				response.totalFailed += result.totalFailed || 0;
+				response.timedOut = response.timedOut || Boolean(result.timedOut);
+
+				for (const [sourceName, metrics] of Object.entries(result.sources || {})) {
+					if (!response.sources[sourceName]) {
+						response.sources[sourceName] = {
+							links: 0,
+							inserted: 0,
+							skipped: 0,
+							failed: 0,
+							success: true,
+							errors: [],
+						};
+					}
+
+					response.sources[sourceName].links += metrics.links || 0;
+					response.sources[sourceName].inserted += metrics.inserted || 0;
+					response.sources[sourceName].skipped += metrics.skipped || 0;
+					response.sources[sourceName].failed += metrics.failed || 0;
+					response.sources[sourceName].success =
+						response.sources[sourceName].success && metrics.success !== false;
+					if (Array.isArray(metrics.errors) && metrics.errors.length > 0) {
+						response.sources[sourceName].errors.push(...metrics.errors);
+					}
+				}
+			} catch (error) {
+				response.totalFailed += 1;
+			}
+
+			response.programsProcessed += 1;
+		}
+
+		const finishedAt = new Date();
+		this.lastRun = {
+			status: "idle",
+			startedAt,
+			finishedAt,
+			totals: {
+				links: response.totalLinks,
+				inserted: response.totalInserted,
+				skipped: response.totalSkipped,
+				failed: response.totalFailed,
+				timedOut: response.timedOut,
+			},
+		};
+
+		return {
+			...response,
+			finishedAt,
+		};
+	}
+
 	/**
 	 * Construye la lista de términos de búsqueda a partir de profession y/o keywords.
 	 * Selecciona un subconjunto variado para maximizar cobertura sin exceder tiempos.
@@ -353,6 +460,20 @@ export class ScrapingService {
 }
 
 const normalizeSourceKey = (value) => String(value || "").trim().toLowerCase();
+
+const dedupeProgramsByName = (programs) => {
+	const seen = new Set();
+	const result = [];
+	for (const program of Array.isArray(programs) ? programs : []) {
+		const name = String(program?.nombre || "").trim();
+		if (!name) continue;
+		const key = name.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		result.push(program);
+	}
+	return result;
+};
 
 const withTimeout = async (promise, timeoutMs, message) => {
 	let timeoutId;

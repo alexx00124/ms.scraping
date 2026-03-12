@@ -79,8 +79,17 @@ Microservicio de scraping e ingesta de ofertas en tabla `Trabajo`.
   ```json
   {
     "profession": "desarrollador frontend",
-    "sources": ["indeed", "linkedin"],
+    "sources": ["faciltrabajo", "acciontrabajo"],
     "linksPerSource": 10
+  }
+  ```
+
+  - También soporta ejecutar para todas las carreras UDC en una sola corrida:
+  ```json
+  {
+    "allPrograms": true,
+    "sources": ["faciltrabajo", "acciontrabajo"],
+    "linksPerSource": 8
   }
   ```
 - `GET /scraping/sources`
@@ -92,11 +101,8 @@ Microservicio de scraping e ingesta de ofertas en tabla `Trabajo`.
 
 ## Fuentes soportadas
 
-- indeed
-- linkedin
-- jooble
-- opcionempleo
-- talent
+- acciontrabajo
+- faciltrabajo
 
 ## Notas
 

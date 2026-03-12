@@ -43,8 +43,9 @@ export const validateStartScrapingPayload = (payload) => {
 		Array.isArray(payload?.keywords) &&
 		payload.keywords.length > 0 &&
 		payload.keywords.every((k) => hasText(k));
+	const allProgramsRequested = payload?.allPrograms === true;
 
-	if (!hasProfession && !hasKeywords) {
+	if (!hasProfession && !hasKeywords && !allProgramsRequested) {
 		details.profession = "profession (string) o keywords (array de strings) es requerido.";
 	}
 
@@ -70,6 +71,10 @@ export const validateStartScrapingPayload = (payload) => {
 		) {
 			details.linksPerSource = "linksPerSource debe ser un entero entre 1 y 100.";
 		}
+	}
+
+	if (payload?.allPrograms !== undefined && typeof payload.allPrograms !== "boolean") {
+		details.allPrograms = "allPrograms debe ser booleano.";
 	}
 
 	return Object.keys(details).length ? details : null;
