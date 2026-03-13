@@ -55,14 +55,6 @@ const DEFAULT_POLICIES = {
 		useProxy: false,
 		waitUntil: "domcontentloaded",
 	}),
-	unmejorempleo: new SourcePolicy({
-		source: "unmejorempleo",
-		discovery: { concurrency: 1, minDelayMs: 900, maxDelayMs: 1800, timeoutMs: 25000 },
-		detail: { concurrency: 1, minDelayMs: 1000, maxDelayMs: 2200, timeoutMs: 25000, retries: 2 },
-		cooldownMs: 30 * 60 * 1000,
-		useProxy: false,
-		waitUntil: "domcontentloaded",
-	}),
 };
 
 export const getSourcePolicy = (sourceName) =>
