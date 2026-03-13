@@ -40,13 +40,6 @@ class SourcePolicy {
 }
 
 const DEFAULT_POLICIES = {
-	acciontrabajo: new SourcePolicy({
-		source: "acciontrabajo",
-		discovery: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2800, timeoutMs: 22000 },
-		detail: { concurrency: 1, minDelayMs: 1800, maxDelayMs: 4500, timeoutMs: 45000, retries: 3 },
-		cooldownMs: 45 * 60 * 1000,
-		useProxy: false,
-	}),
 	spe: new SourcePolicy({
 		source: "spe",
 		discovery: { concurrency: 1, minDelayMs: 250, maxDelayMs: 900, timeoutMs: 15000 },
