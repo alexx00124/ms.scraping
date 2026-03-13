@@ -5,7 +5,9 @@ export const normalizeUrl = (value) => {
 
 	try {
 		const parsed = new URL(value);
-		parsed.hash = "";
+		if (!/^#ec[a-z0-9]+$/i.test(parsed.hash)) {
+			parsed.hash = "";
+		}
 		for (const param of [
 			"utm_source",
 			"utm_medium",
