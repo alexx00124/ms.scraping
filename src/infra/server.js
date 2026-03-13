@@ -14,6 +14,7 @@ import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
 import { ElempleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
+import { OpcionempleoScraper } from "../adapters/scrapers/sites/opcionempleoScraper.js";
 
 const PORT = process.env.PORT || 6006;
 const __filename = fileURLToPath(import.meta.url);
@@ -40,9 +41,14 @@ scraperFactory.register(
 	"elempleo",
 	new ElempleoScraper({ browserEngine, blockDetector }),
 );
+scraperFactory.register(
+	"opcionempleo",
+	new OpcionempleoScraper({ browserEngine, blockDetector }),
+);
 
 const DEFAULT_SCRAPING_SOURCES = [
 	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
+	{ nombre: "Opcionempleo", urlBase: "https://www.opcionempleo.com.co" },
 ];
 
 const scrapingSourceRepository = new ResilientScrapingSourceRepository(
