@@ -3,64 +3,92 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ms-scraping control panel</title>
+  <title>ms-scraping | Radar de ofertas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="page-shell">
-    <header class="hero">
+  <div class="app-shell">
+    <header class="topbar">
       <div>
         <p class="eyebrow">Bolsa UDC / ms-scraping</p>
-        <h1>Centro de control para ejecutar scraping, monitorear estado y administrar fuentes.</h1>
+        <h1>Radar de scraping para ver ofertas, carreras y fuentes activas.</h1>
         <p class="hero-copy">
-          Interfaz ligera para operar el microservicio sin depender de Postman: dispara corridas,
-          revisa salud del servicio e interactua con la configuracion de fuentes.
+          Esta vista ya no es un panel tecnico frio. Ahora muestra lo que esta recogiendo el servicio,
+          que carreras se estan cubriendo y como rinde cada fuente en la ultima corrida.
         </p>
       </div>
-      <div class="hero-metrics">
-        <article class="metric-card">
-          <span>Servicio</span>
-          <strong id="healthBadge">Verificando...</strong>
-        </article>
-        <article class="metric-card">
-          <span>Fuentes activas</span>
-          <strong id="sourcesCount">-</strong>
-        </article>
-        <article class="metric-card">
-          <span>Ultima insercion</span>
-          <strong id="insertedSoFar">-</strong>
-        </article>
+
+      <div class="hero-panel">
+        <div class="hero-status-row">
+          <span class="status-dot" id="healthDot"></span>
+          <strong id="healthBadge">Verificando servicio...</strong>
+        </div>
+        <p id="heroRunLabel" class="hero-run-label">Sin corridas recientes.</p>
+        <button id="refreshStatusBtn" class="ghost-button" type="button">Actualizar tablero</button>
       </div>
     </header>
 
-    <main class="dashboard-grid">
-      <section class="panel panel-accent">
+    <section class="metrics-grid">
+      <article class="metric-card accent-teal">
+        <span>Ofertas insertadas</span>
+        <strong id="insertedSoFar">0</strong>
+        <small>Vacantes capturadas en la ultima corrida</small>
+      </article>
+      <article class="metric-card accent-amber">
+        <span>Links evaluados</span>
+        <strong id="linksCount">0</strong>
+        <small>Discovery total del ultimo proceso</small>
+      </article>
+      <article class="metric-card accent-blue">
+        <span>Fuentes activas</span>
+        <strong id="sourcesCount">0</strong>
+        <small>Scrapers disponibles en runtime</small>
+      </article>
+      <article class="metric-card accent-rose">
+        <span>Carreras cargadas</span>
+        <strong id="programsCount">0</strong>
+        <small>Programas activos sincronizados</small>
+      </article>
+    </section>
+
+    <main class="layout-grid">
+      <section class="panel panel-wide panel-priority">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Ofertas capturadas</p>
+            <h2>Ultimas vacantes detectadas</h2>
+          </div>
+        </div>
+
+        <div id="jobsFeed" class="jobs-feed"></div>
+      </section>
+
+      <section class="panel panel-highlight">
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Operacion</p>
-            <h2>Iniciar scraping</h2>
+            <h2>Lanzar una corrida</h2>
           </div>
-          <button id="refreshStatusBtn" class="ghost-button" type="button">Actualizar estado</button>
         </div>
 
         <form id="scrapingForm" class="stack-form">
           <label>
             <span>Profesion principal</span>
-            <input type="text" name="profession" placeholder="desarrollador frontend" />
+            <input type="text" name="profession" placeholder="ingeniero de sistemas" />
           </label>
 
           <label>
             <span>Keywords adicionales</span>
-            <input type="text" name="keywords" placeholder="react, javascript, ux" />
+            <input type="text" name="keywords" placeholder="backend, datos, qa" />
           </label>
 
           <div class="inline-fields">
             <label>
               <span>Links por fuente</span>
-              <input type="number" name="linksPerSource" min="1" max="100" value="8" />
+              <input type="number" name="linksPerSource" min="1" max="40" value="8" />
             </label>
 
             <label class="toggle-field">
@@ -70,97 +98,45 @@
           </div>
 
           <fieldset>
-            <legend>Fuentes</legend>
+            <legend>Fuentes disponibles</legend>
             <div id="sourcesChecklist" class="checklist"></div>
           </fieldset>
 
-          <button class="primary-button" type="submit">Lanzar scraping</button>
+          <button class="primary-button" type="submit">Ejecutar scraping</button>
         </form>
 
-        <pre id="scrapingResponse" class="console-box">Esperando accion...</pre>
+        <pre id="scrapingResponse" class="console-box">Esperando una corrida...</pre>
       </section>
 
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Telemetry</p>
-            <h2>Estado de ejecucion</h2>
+            <p class="eyebrow">Estado</p>
+            <h2>Resumen de la ultima corrida</h2>
           </div>
         </div>
 
         <div id="statusCards" class="status-cards"></div>
-        <pre id="statusOutput" class="console-box compact">Cargando estado...</pre>
+        <div class="run-meta" id="runMeta"></div>
+        <div class="source-breakdown" id="sourceBreakdown"></div>
       </section>
 
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Ingesta manual</p>
-            <h2>Crear una vacante</h2>
+            <p class="eyebrow">Carreras UDC</p>
+            <h2>Programas monitoreados</h2>
           </div>
         </div>
 
-        <form id="jobForm" class="stack-form">
-          <label>
-            <span>Titulo</span>
-            <input type="text" name="titulo" placeholder="Frontend Developer" required />
-          </label>
-          <label>
-            <span>Empresa</span>
-            <input type="text" name="empresa" placeholder="Acme SAS" required />
-          </label>
-          <label>
-            <span>Ubicacion</span>
-            <input type="text" name="ubicacion" placeholder="Bogota" />
-          </label>
-          <label>
-            <span>Descripcion</span>
-            <textarea name="descripcion" rows="5" placeholder="Describe la vacante" required></textarea>
-          </label>
-
-          <div class="inline-fields">
-            <label>
-              <span>Modalidad</span>
-              <select name="modalidad">
-                <option value="">Sin definir</option>
-                <option value="PRESENCIAL">Presencial</option>
-                <option value="REMOTO">Remoto</option>
-                <option value="HIBRIDO">Hibrido</option>
-              </select>
-            </label>
-            <label>
-              <span>Fuente</span>
-              <input type="text" name="fuente" placeholder="manual" />
-            </label>
-          </div>
-
-          <div class="inline-fields">
-            <label>
-              <span>Salario minimo</span>
-              <input type="number" name="salarioMin" min="0" step="1000" />
-            </label>
-            <label>
-              <span>Salario maximo</span>
-              <input type="number" name="salarioMax" min="0" step="1000" />
-            </label>
-          </div>
-
-          <label>
-            <span>URL original</span>
-            <input type="url" name="urlOriginal" placeholder="https://..." />
-          </label>
-
-          <button class="secondary-button" type="submit">Enviar vacante</button>
-        </form>
-
-        <pre id="jobResponse" class="console-box">Sin envios todavia.</pre>
+        <div id="programsGrid" class="programs-grid"></div>
       </section>
 
-      <section class="panel panel-wide">
+      <section class="panel">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Fuentes configuradas</p>
-            <h2>Administracion de fuentes</h2>
+            <p class="eyebrow">Fuentes</p>
+            <h2>Catalogo activo</h2>
           </div>
           <button id="reloadSourcesDbBtn" class="ghost-button" type="button">Recargar</button>
         </div>
@@ -180,7 +156,7 @@
           <div class="inline-fields">
             <label>
               <span>Nombre</span>
-              <input type="text" name="nombre" placeholder="Computrabajo" required />
+              <input type="text" name="nombre" placeholder="Nueva fuente" required />
             </label>
             <label>
               <span>Base URL</span>
@@ -192,6 +168,17 @@
 
         <div id="sourcesDbList" class="sources-list"></div>
         <pre id="sourcesDbResponse" class="console-box compact">Sin operaciones administrativas.</pre>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Trazabilidad</p>
+            <h2>Salida tecnica del servicio</h2>
+          </div>
+        </div>
+
+        <pre id="statusOutput" class="console-box compact">Cargando estado...</pre>
       </section>
     </main>
   </div>
