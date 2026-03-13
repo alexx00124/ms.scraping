@@ -225,10 +225,6 @@ export class ScrapingService {
 		}
 
 		const policy = scraper.getPolicy?.() || null;
-		const effectiveSearchTerms =
-			policy?.maxSearchTerms > 0
-				? searchTerms.slice(0, Math.max(1, policy.maxSearchTerms))
-				: searchTerms;
 
 		const metrics = {
 			links: 0,
@@ -237,14 +233,14 @@ export class ScrapingService {
 			failed: 0,
 			success: true,
 			errors: [],
-			searchTermsUsed: effectiveSearchTerms,
+			searchTermsUsed: searchTerms,
 			policy,
 		};
 
 		const discovered = await this.discoveryService.discover({
 			scraper,
 			sourceName,
-			searchTerms: effectiveSearchTerms,
+			searchTerms,
 			limitPerTerm: linksPerTermPerSource,
 			isExpired,
 			deduplicationService: this.deduplicationService,
