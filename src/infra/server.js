@@ -13,6 +13,7 @@ import { BlockDetector } from "../adapters/scrapers/blockDetector.js";
 import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
+import { ComputrabajoScraper } from "../adapters/scrapers/sites/computrabajoScraper.js";
 import { ElempleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
 import { OpcionempleoScraper } from "../adapters/scrapers/sites/opcionempleoScraper.js";
 
@@ -38,6 +39,10 @@ const blockDetector = new BlockDetector();
 
 const scraperFactory = new ScraperFactory();
 scraperFactory.register(
+	"computrabajo",
+	new ComputrabajoScraper({ browserEngine, blockDetector }),
+);
+scraperFactory.register(
 	"elempleo",
 	new ElempleoScraper({ browserEngine, blockDetector }),
 );
@@ -47,6 +52,7 @@ scraperFactory.register(
 );
 
 const DEFAULT_SCRAPING_SOURCES = [
+	{ nombre: "Computrabajo", urlBase: "https://co.computrabajo.com" },
 	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
 	{ nombre: "Opcionempleo", urlBase: "https://www.opcionempleo.com.co" },
 ];
