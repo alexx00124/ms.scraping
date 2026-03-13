@@ -1,17 +1,17 @@
-import * as cheerio from "cheerio";
-import { ScraperProvider } from "../../../ports/scraperProvider.js";
+import { BaseBrowserScraper } from "../baseBrowserScraper.js";
+import { getSourcePolicy } from "../../../domain/scraping/sourcePolicies.js";
 import { normalizeUrl } from "../../../domain/urlNormalization.js";
-import fetchPage from "../fetchPage.js";
 
-export class FaciltrabajoScraper extends ScraperProvider {
-	constructor() {
-		super();
+export class FaciltrabajoScraper extends BaseBrowserScraper {
+	constructor(deps) {
+		super({
+			...deps,
+			policy: deps?.policy || getSourcePolicy("faciltrabajo"),
+		});
 		this.baseUrl = "https://www.faciltrabajo.com.co";
 	}
 
 	async extractJobLinks(profession, limit = 10) {
-		const links = new Set();
-
 		try {
 			const slug = slugify(profession);
 			const candidates = [
@@ -20,26 +20,17 @@ export class FaciltrabajoScraper extends ScraperProvider {
 				`${this.baseUrl}`,
 			];
 
-			for (const url of candidates) {
-				const html = await fetchPage(url);
-				if (!html) continue;
-
-				const $ = cheerio.load(html);
-				$("a[href*='empleo-'][href$='.html']").each((_, el) => {
-					const href = $(el).attr("href");
-					if (!href) return;
+			const found = await this.collectLinksFromUrls(
+				candidates,
+				(href) => {
 					const absolute = toAbsoluteUrl(href, this.baseUrl);
-					if (absolute.includes("/empleo-") && absolute.endsWith(".html")) {
-						links.add(normalizeUrl(absolute));
-					}
-					if (links.size >= limit) return false;
-					return;
-				});
+					return absolute.includes("/empleo-") && absolute.endsWith(".html");
+				},
+				limit,
+			);
+			const links = found.map((href) => normalizeUrl(toAbsoluteUrl(href, this.baseUrl)));
 
-				if (links.size >= limit) break;
-			}
-
-			console.log(`📊 FacilTrabajo - Enlaces encontrados: ${links.size}`);
+			console.log(`📊 FacilTrabajo - Enlaces encontrados: ${links.length}`);
 			return Array.from(links).slice(0, limit);
 		} catch (error) {
 			console.error("❌ Error al extraer links de FacilTrabajo:", error.message);
@@ -49,60 +40,78 @@ export class FaciltrabajoScraper extends ScraperProvider {
 
 	async extractJobDetails(url) {
 		try {
-			const html = await fetchPage(url);
-			if (!html) return null;
+			return await this.withSourcePage(url, {
+				kind: "detail",
+				timeoutMs: this.getPolicy().getTimeout("detail"),
+			}, async (page) => {
+				await page.waitForLoadState("domcontentloaded").catch(() => {});
+				await page.waitForTimeout(400).catch(() => {});
 
-			const $ = cheerio.load(html);
+				const data = await page.evaluate(() => {
+					const selectorsToText = (selectors) => {
+						for (const selector of selectors) {
+							const element = document.querySelector(selector);
+							const text = element?.textContent?.replace(/\s+/g, " ").trim();
+							if (text) return text;
+						}
+						return null;
+					};
 
-			const title =
-				$("h1").first().text().trim() ||
-				extractFromTitle($("title").text()) ||
-				"Sin titulo";
+					const selectorsToAttr = (selectors, attr) => {
+						for (const selector of selectors) {
+							const value = document.querySelector(selector)?.getAttribute(attr)?.trim();
+							if (value) return value;
+						}
+						return null;
+					};
 
-			const company =
-				extractCompanyFromTitle($("title").text()) ||
-				normalizeText(
-					$("a[href*='empresa'], .empresa, .company, strong:contains('Empresa')")
-						.first()
-						.text(),
-				) ||
-				"Empresa no especificada";
+					return {
+						title: selectorsToText(["h1"]) || document.title || "Sin titulo",
+						company:
+							selectorsToText([
+								"a[href*='empresa']",
+								".empresa",
+								".company",
+							]) || "Empresa no especificada",
+						location: selectorsToText([
+							".ubicacion",
+							".location",
+							".ciudad",
+						]),
+						description:
+							selectorsToAttr(["meta[name='description']"], "content") ||
+							selectorsToText([
+								".job-description",
+								".descripcion",
+								"#descripcion",
+								".detalle-oferta",
+								".panel-body",
+							]) ||
+							"Sin descripcion",
+						salary: selectorsToText([
+							".salary",
+							".salario",
+						]),
+						pageTitle: document.title || "",
+					};
+				});
 
-			const location =
-				extractLocationFromTitle($("title").text()) ||
-				normalizeText(
-					$(".ubicacion, .location, .ciudad, span:contains('Ubicación')")
-						.first()
-						.text(),
-				) ||
-				null;
-
-			const description =
-				normalizeText($("meta[name='description']").attr("content")) ||
-				normalizeText(
-					$(
-						".job-description, .descripcion, #descripcion, .detalle-oferta, .panel-body",
-					)
-						.first()
-						.text(),
-				) ||
-				"Sin descripcion";
-
-			const salary =
-				normalizeText(
-					$(".salary, .salario, span:contains('$'), span:contains('COP')")
-						.first()
-						.text(),
-				) || null;
-
-			return {
-				title,
-				company,
-				location,
-				description: description.substring(0, 5000),
-				salary,
-				url: normalizeUrl(url),
-			};
+				const pageTitle = normalizeText(data.pageTitle);
+				return {
+					title: normalizeText(data.title) || extractFromTitle(pageTitle) || "Sin titulo",
+					company:
+						extractCompanyFromTitle(pageTitle) ||
+						normalizeText(data.company) ||
+						"Empresa no especificada",
+					location:
+						extractLocationFromTitle(pageTitle) ||
+						normalizeText(data.location) ||
+						null,
+					description: normalizeText(data.description || "Sin descripcion").substring(0, 5000),
+					salary: normalizeText(data.salary) || null,
+					url: normalizeUrl(url),
+				};
+			});
 		} catch (error) {
 			console.error("❌ Error al extraer detalle de FacilTrabajo:", error.message);
 			return null;

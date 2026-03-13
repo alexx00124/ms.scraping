@@ -64,6 +64,19 @@ export const buildScrapingController = (scrapingService) => {
 			return res.status(error.httpStatus).json({ error });
 		}
 
+		if (allPrograms) {
+			await scrapingService.ensureProgramsLoaded();
+			if (scrapingService.getProgramsCount() === 0) {
+				return res.status(409).json({
+					error: {
+						code: "PROGRAMS_NOT_AVAILABLE",
+						message: "No hay programas academicos disponibles desde ms-jobs. Desmarca 'Todas las carreras' o levanta ms-jobs.",
+						httpStatus: 409,
+					},
+				});
+			}
+		}
+
 		const label = allPrograms
 			? "todas las carreras UDC"
 			: profession || keywords.slice(0, 3).join(", ");

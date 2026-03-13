@@ -16,4 +16,13 @@ export class ScraperFactory {
 			.filter(([, scraper]) => scraper?.isAvailable())
 			.map(([name]) => name);
 	}
+
+	getBlockedSources() {
+		return Array.from(this.scrapers.entries())
+			.map(([name, scraper]) => ({
+				name,
+				blockInfo: scraper?.getBlockInfo?.() || null,
+			}))
+			.filter((item) => item.blockInfo);
+	}
 }

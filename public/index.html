@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ms-scraping control panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Bolsa UDC / ms-scraping</p>
+        <h1>Centro de control para ejecutar scraping, monitorear estado y administrar fuentes.</h1>
+        <p class="hero-copy">
+          Interfaz ligera para operar el microservicio sin depender de Postman: dispara corridas,
+          revisa salud del servicio e interactua con la configuracion de fuentes.
+        </p>
+      </div>
+      <div class="hero-metrics">
+        <article class="metric-card">
+          <span>Servicio</span>
+          <strong id="healthBadge">Verificando...</strong>
+        </article>
+        <article class="metric-card">
+          <span>Fuentes activas</span>
+          <strong id="sourcesCount">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Ultima insercion</span>
+          <strong id="insertedSoFar">-</strong>
+        </article>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel panel-accent">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Operacion</p>
+            <h2>Iniciar scraping</h2>
+          </div>
+          <button id="refreshStatusBtn" class="ghost-button" type="button">Actualizar estado</button>
+        </div>
+
+        <form id="scrapingForm" class="stack-form">
+          <label>
+            <span>Profesion principal</span>
+            <input type="text" name="profession" placeholder="desarrollador frontend" />
+          </label>
+
+          <label>
+            <span>Keywords adicionales</span>
+            <input type="text" name="keywords" placeholder="react, javascript, ux" />
+          </label>
+
+          <div class="inline-fields">
+            <label>
+              <span>Links por fuente</span>
+              <input type="number" name="linksPerSource" min="1" max="100" value="8" />
+            </label>
+
+            <label class="toggle-field">
+              <span>Todas las carreras</span>
+              <input type="checkbox" name="allPrograms" />
+            </label>
+          </div>
+
+          <fieldset>
+            <legend>Fuentes</legend>
+            <div id="sourcesChecklist" class="checklist"></div>
+          </fieldset>
+
+          <button class="primary-button" type="submit">Lanzar scraping</button>
+        </form>
+
+        <pre id="scrapingResponse" class="console-box">Esperando accion...</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Telemetry</p>
+            <h2>Estado de ejecucion</h2>
+          </div>
+        </div>
+
+        <div id="statusCards" class="status-cards"></div>
+        <pre id="statusOutput" class="console-box compact">Cargando estado...</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Ingesta manual</p>
+            <h2>Crear una vacante</h2>
+          </div>
+        </div>
+
+        <form id="jobForm" class="stack-form">
+          <label>
+            <span>Titulo</span>
+            <input type="text" name="titulo" placeholder="Frontend Developer" required />
+          </label>
+          <label>
+            <span>Empresa</span>
+            <input type="text" name="empresa" placeholder="Acme SAS" required />
+          </label>
+          <label>
+            <span>Ubicacion</span>
+            <input type="text" name="ubicacion" placeholder="Bogota" />
+          </label>
+          <label>
+            <span>Descripcion</span>
+            <textarea name="descripcion" rows="5" placeholder="Describe la vacante" required></textarea>
+          </label>
+
+          <div class="inline-fields">
+            <label>
+              <span>Modalidad</span>
+              <select name="modalidad">
+                <option value="">Sin definir</option>
+                <option value="PRESENCIAL">Presencial</option>
+                <option value="REMOTO">Remoto</option>
+                <option value="HIBRIDO">Hibrido</option>
+              </select>
+            </label>
+            <label>
+              <span>Fuente</span>
+              <input type="text" name="fuente" placeholder="manual" />
+            </label>
+          </div>
+
+          <div class="inline-fields">
+            <label>
+              <span>Salario minimo</span>
+              <input type="number" name="salarioMin" min="0" step="1000" />
+            </label>
+            <label>
+              <span>Salario maximo</span>
+              <input type="number" name="salarioMax" min="0" step="1000" />
+            </label>
+          </div>
+
+          <label>
+            <span>URL original</span>
+            <input type="url" name="urlOriginal" placeholder="https://..." />
+          </label>
+
+          <button class="secondary-button" type="submit">Enviar vacante</button>
+        </form>
+
+        <pre id="jobResponse" class="console-box">Sin envios todavia.</pre>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Fuentes configuradas</p>
+            <h2>Administracion de fuentes</h2>
+          </div>
+          <button id="reloadSourcesDbBtn" class="ghost-button" type="button">Recargar</button>
+        </div>
+
+        <div class="auth-bar">
+          <label>
+            <span>X-User-Id</span>
+            <input id="userIdInput" type="text" placeholder="admin-user" />
+          </label>
+          <label>
+            <span>X-Gateway-Auth</span>
+            <input id="gatewaySecretInput" type="password" placeholder="opcional" />
+          </label>
+        </div>
+
+        <form id="sourceForm" class="stack-form slim-form">
+          <div class="inline-fields">
+            <label>
+              <span>Nombre</span>
+              <input type="text" name="nombre" placeholder="Computrabajo" required />
+            </label>
+            <label>
+              <span>Base URL</span>
+              <input type="url" name="baseUrl" placeholder="https://portal.com" required />
+            </label>
+          </div>
+          <button class="secondary-button" type="submit">Agregar fuente</button>
+        </form>
+
+        <div id="sourcesDbList" class="sources-list"></div>
+        <pre id="sourcesDbResponse" class="console-box compact">Sin operaciones administrativas.</pre>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,46 +1,31 @@
-import * as cheerio from "cheerio";
-import { ScraperProvider } from "../../../ports/scraperProvider.js";
+import { BaseBrowserScraper } from "../baseBrowserScraper.js";
+import { getSourcePolicy } from "../../../domain/scraping/sourcePolicies.js";
 import { normalizeUrl } from "../../../domain/urlNormalization.js";
-import fetchPage from "../fetchPage.js";
 
-export class AcciontrabajoScraper extends ScraperProvider {
-	constructor() {
-		super();
+export class AcciontrabajoScraper extends BaseBrowserScraper {
+	constructor(deps) {
+		super({
+			...deps,
+			policy: deps?.policy || getSourcePolicy("acciontrabajo"),
+		});
 		this.baseUrl = "https://col.acciontrabajo.com";
 	}
 
 	async extractJobLinks(profession, limit = 10) {
-		const links = new Set();
 		try {
 			const slug = slugify(profession);
 			const urls = [
 				`${this.baseUrl}/empleos-de-${slug}-en-colombia`,
 				`${this.baseUrl}/ofertas-de-trabajo-en-colombia`,
 			];
+			const found = await this.collectLinksFromUrls(
+				urls,
+				(href) => looksLikeJobLink(toRelativeOrAbsolute(href, this.baseUrl)),
+				limit,
+			);
+			const links = found.map((href) => normalizeUrl(toAbsoluteUrl(href, this.baseUrl)));
 
-			for (const url of urls) {
-				const html = await fetchPage(url);
-				if (!html) continue;
-
-				const $ = cheerio.load(html);
-				$("a[href]").each((_, el) => {
-					const href = $(el).attr("href");
-					if (!href) return;
-
-					if (!looksLikeJobLink(href)) {
-						return;
-					}
-
-					const fullUrl = toAbsoluteUrl(href, this.baseUrl).split("#")[0];
-					links.add(normalizeUrl(fullUrl));
-					if (links.size >= limit) return false;
-					return;
-				});
-
-				if (links.size >= limit) break;
-			}
-
-			console.log(`📊 AccionTrabajo - Enlaces encontrados: ${links.size}`);
+			console.log(`📊 AccionTrabajo - Enlaces encontrados: ${links.length}`);
 			return Array.from(links).slice(0, limit);
 		} catch (error) {
 			console.error("❌ Error al extraer links de AccionTrabajo:", error.message);
@@ -50,63 +35,79 @@ export class AcciontrabajoScraper extends ScraperProvider {
 
 	async extractJobDetails(url) {
 		try {
-			const html = await fetchPage(url);
-			if (!html) return null;
+			return await this.withSourcePage(url, {
+				kind: "detail",
+				timeoutMs: this.getPolicy().getTimeout("detail"),
+			}, async (page) => {
+				await page.waitForLoadState("domcontentloaded").catch(() => {});
+				await page.waitForTimeout(400).catch(() => {});
 
-			const $ = cheerio.load(html);
+				const data = await page.evaluate(() => {
+					const selectorsToText = (selectors) => {
+						for (const selector of selectors) {
+							const element = document.querySelector(selector);
+							const text = element?.textContent?.replace(/\s+/g, " ").trim();
+							if (text) return text;
+						}
+						return null;
+					};
 
-			const title =
-				normalizeText($("h1").first().text()) ||
-				normalizeText($("meta[property='og:title']").attr("content")) ||
-				normalizeText($("title").text()) ||
-				"Sin titulo";
+					const selectorsToAttr = (selectors, attr) => {
+						for (const selector of selectors) {
+							const value = document.querySelector(selector)?.getAttribute(attr)?.trim();
+							if (value) return value;
+						}
+						return null;
+					};
 
-			const company =
-				normalizeText(
-					$(
-						"[itemprop='hiringOrganization'], .company, .empresa, [class*='company'], [class*='empresa']",
-					)
-						.first()
-						.text(),
-				) || "Empresa no especificada";
+					return {
+						title:
+							selectorsToText(["h1"]) ||
+							selectorsToAttr(["meta[property='og:title']"], "content") ||
+							document.title ||
+							"Sin titulo",
+						company:
+							selectorsToText([
+								"[itemprop='hiringOrganization']",
+								".company",
+								".empresa",
+								"[class*='company']",
+								"[class*='empresa']",
+							]) || "Empresa no especificada",
+						location: selectorsToText([
+							"[itemprop='jobLocation']",
+							".location",
+							".ubicacion",
+							"[class*='location']",
+							"[class*='ubicacion']",
+						]),
+						description:
+							selectorsToAttr(["meta[name='description']"], "content") ||
+							selectorsToText([
+								"[itemprop='description']",
+								".description",
+								".job-description",
+								"[class*='description']",
+							]) ||
+							"Sin descripcion",
+						salary: selectorsToText([
+							"[itemprop='baseSalary']",
+							".salary",
+							"[class*='salary']",
+						]),
+						pageTitle: document.title || "",
+					};
+				});
 
-			const location =
-				normalizeText(
-					$(
-						"[itemprop='jobLocation'], .location, .ubicacion, [class*='location'], [class*='ubicacion']",
-					)
-						.first()
-						.text(),
-				) ||
-				extractLocationFromTitle($("title").text()) ||
-				null;
-
-			const description =
-				normalizeText($("meta[name='description']").attr("content")) ||
-				normalizeText(
-					$(
-						"[itemprop='description'], .description, .job-description, [class*='description']",
-					)
-						.first()
-						.text(),
-				) ||
-				"Sin descripcion";
-
-			const salary =
-				normalizeText(
-					$("[itemprop='baseSalary'], .salary, [class*='salary'], span:contains('$')")
-						.first()
-						.text(),
-				) || null;
-
-			return {
-				title: sanitizeTitle(title),
-				company,
-				location,
-				description: description.substring(0, 5000),
-				salary,
-				url: normalizeUrl(url),
-			};
+				return {
+					title: sanitizeTitle(normalizeText(data.title)),
+					company: normalizeText(data.company) || "Empresa no especificada",
+					location: normalizeText(data.location) || extractLocationFromTitle(data.pageTitle) || null,
+					description: normalizeText(data.description || "Sin descripcion").substring(0, 5000),
+					salary: normalizeText(data.salary) || null,
+					url: normalizeUrl(url),
+				};
+			});
 		} catch (error) {
 			console.error("❌ Error al extraer detalle de AccionTrabajo:", error.message);
 			return null;
@@ -117,6 +118,14 @@ export class AcciontrabajoScraper extends ScraperProvider {
 		return "acciontrabajo";
 	}
 }
+
+const toRelativeOrAbsolute = (href, baseUrl) => {
+	if (!href) return href;
+	if (href.startsWith("http")) {
+		return href.replace(baseUrl, "");
+	}
+	return href;
+};
 
 const toAbsoluteUrl = (href, baseUrl) => {
 	if (href.startsWith("http")) return href;

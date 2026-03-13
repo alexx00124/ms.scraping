@@ -11,10 +11,9 @@
 	},
 	"dependencies": {
 		"@prisma/client": "^6.19.2",
-		"cheerio": "1.0.0-rc.12",
 		"dotenv": "^16.4.5",
 		"express": "^4.21.2",
-		"got": "^14.6.6"
+		"playwright": "^1.58.2"
 	},
 	"devDependencies": {
 		"prisma": "^6.4.1"

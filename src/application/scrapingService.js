@@ -2,16 +2,14 @@ import {
 	DEFAULT_LINKS_PER_SOURCE,
 	SCRAPING_SOURCES,
 } from "../domain/scrapingSources.js";
-import { normalizeUrl } from "../domain/urlNormalization.js";
-import { matchJobToProgram } from "../domain/programMatcher.js";
-import { areDuplicates } from "../domain/duplicateDetector.js";
+import { DiscoveryService } from "./services/discoveryService.js";
+import { ExtractionService } from "./services/extractionService.js";
+import { DeduplicationService } from "./services/deduplicationService.js";
+import { NormalizationService } from "./services/normalizationService.js";
+import { PublishingService } from "./services/publishingService.js";
 
 const MAX_SOURCES_PER_RUN = Number(process.env.SCRAPING_MAX_SOURCES || 4);
 const MAX_LINKS_PER_SOURCE = Number(process.env.SCRAPING_MAX_LINKS_PER_SOURCE || 8);
-const SOURCE_TIMEOUT_MS = Number(process.env.SCRAPING_SOURCE_TIMEOUT_MS || 12000);
-const DETAIL_TIMEOUT_MS = Number(process.env.SCRAPING_DETAIL_TIMEOUT_MS || 7000);
-const DETAIL_CONCURRENCY = Number(process.env.SCRAPING_DETAIL_CONCURRENCY || 4);
-const DETAIL_RETRY_ATTEMPTS = Number(process.env.SCRAPING_DETAIL_RETRY_ATTEMPTS || 1);
 const MAX_SEARCH_TERMS = Number(process.env.SCRAPING_MAX_SEARCH_TERMS || 4);
 const MAX_DURATION_MS = Number(process.env.SCRAPING_MAX_DURATION_MS || 70000);
 
@@ -21,6 +19,7 @@ export class ScrapingService {
 		scraperFactory,
 		academicProgramRepository,
 		scrapingSourceRepository,
+		services = {},
 	) {
 		this.jobRepository = jobRepository;
 		this.scraperFactory = scraperFactory;
@@ -33,18 +32,35 @@ export class ScrapingService {
 			finishedAt: null,
 			totals: null,
 		};
-		
-		// Cargar programas activos al iniciar
+
+		this.deduplicationService =
+			services.deduplicationService || new DeduplicationService(jobRepository);
+		this.normalizationService =
+			services.normalizationService || new NormalizationService([]);
+		this.publishingService =
+			services.publishingService || new PublishingService(jobRepository);
+		this.discoveryService =
+			services.discoveryService || new DiscoveryService();
+		this.extractionService =
+			services.extractionService ||
+			new ExtractionService({
+				deduplicationService: this.deduplicationService,
+				normalizationService: this.normalizationService,
+				publishingService: this.publishingService,
+			});
+
 		this.loadPrograms();
 	}
-	
+
 	async loadPrograms() {
 		try {
 			this.programs = await this.academicProgramRepository.listActive();
-			console.log(`[ScrapingService] Cargados ${this.programs.length} programas académicos`);
+			this.normalizationService.setPrograms(this.programs);
+			console.log(`[ScrapingService] Cargados ${this.programs.length} programas academicos`);
 		} catch (error) {
 			console.error("[ScrapingService] Error cargando programas:", error.message);
 			this.programs = [];
+			this.normalizationService.setPrograms([]);
 		}
 	}
 
@@ -64,7 +80,21 @@ export class ScrapingService {
 		return {
 			...this.lastRun,
 			sources: this.getAvailableSources(),
+			blockedSources: this.scraperFactory.getBlockedSources(),
 		};
+	}
+
+	getProgramsCount() {
+		return Array.isArray(this.programs) ? this.programs.length : 0;
+	}
+
+	async ensureProgramsLoaded() {
+		if (this.getProgramsCount() > 0) {
+			return this.programs;
+		}
+
+		await this.loadPrograms();
+		return this.programs;
 	}
 
 	async startScraping({
@@ -78,20 +108,16 @@ export class ScrapingService {
 			return this.startScrapingAllPrograms({ sources, linksPerSource });
 		}
 
+		await this.ensureProgramsLoaded();
 		const selectedSources = await this.resolveSources(sources);
 		const startedAt = new Date();
 		const deadlineAt = Date.now() + Math.max(15000, MAX_DURATION_MS);
 		const isExpired = () => Date.now() >= deadlineAt;
-
-		// Construir lista de términos de búsqueda
-		// Prioridad: keywords[] > profession (retrocompatible)
 		const searchTerms = this.buildSearchTerms(profession, keywords);
 
 		const requestedPerSource = Number(linksPerSource) || DEFAULT_LINKS_PER_SOURCE;
 		const perSourceLimit = Math.min(requestedPerSource, Math.max(1, MAX_LINKS_PER_SOURCE));
-
-		// Repartir el budget de links entre los términos de búsqueda
-		const linksPerTermPerSource = Math.max(1, Math.ceil(perSourceLimit / searchTerms.length));
+		const linksPerTermPerSource = Math.max(1, Math.ceil(perSourceLimit / Math.max(1, searchTerms.length)));
 
 		this.lastRun = {
 			status: "running",
@@ -102,7 +128,7 @@ export class ScrapingService {
 		};
 
 		const response = {
-			profession: profession || searchTerms[0],
+			profession: profession || searchTerms[0] || null,
 			searchTerms,
 			startedAt,
 			totalLinks: 0,
@@ -113,155 +139,28 @@ export class ScrapingService {
 			sources: {},
 		};
 
-		// Set global para deduplicar URLs encontradas en esta sesión (entre keywords)
 		const seenUrls = new Set();
 
-		const sourceResults = await Promise.all(
-			selectedSources.map(async (sourceName) => {
-			const scraper = this.scraperFactory.getScraper(sourceName);
-			if (!scraper?.isAvailable()) {
-				return {
-					sourceName,
-					metrics: {
-					links: 0,
-					inserted: 0,
-					skipped: 0,
-					failed: 0,
-					success: false,
-					error: "Fuente no disponible.",
-					},
-				};
+		for (const sourceName of selectedSources) {
+			if (isExpired()) {
+				response.timedOut = true;
+				break;
 			}
 
-			const metrics = {
-				links: 0,
-				inserted: 0,
-				skipped: 0,
-				failed: 0,
-				success: true,
-				errors: [],
-				searchTermsUsed: searchTerms,
-			};
+			const sourceResult = await this.processSource({
+				sourceName,
+				searchTerms,
+				linksPerTermPerSource,
+				seenUrls,
+				isExpired,
+			});
 
-			// Iterar sobre cada término de búsqueda para esta fuente
-			for (const term of searchTerms) {
-				if (isExpired()) {
-					metrics.success = false;
-					metrics.errors.push("Tiempo máximo alcanzado para esta ejecución");
-					response.timedOut = true;
-					break;
-				}
-
-				try {
-					const sourceTimeout = Math.min(
-						SOURCE_TIMEOUT_MS,
-						getRemainingTime(deadlineAt, SOURCE_TIMEOUT_MS),
-					);
-					const links = await withTimeout(
-						scraper.extractJobLinks(term, linksPerTermPerSource),
-						sourceTimeout,
-						`Timeout extrayendo links en ${sourceName} para "${term}"`,
-					);
-
-					// Filtrar links ya vistos en esta sesión
-					const newLinks = links.filter((link) => {
-						const normalized = normalizeUrl(link) || link;
-						if (seenUrls.has(normalized)) return false;
-						seenUrls.add(normalized);
-						return true;
-					});
-
-					metrics.links += newLinks.length;
-
-					await runWithConcurrency(newLinks, DETAIL_CONCURRENCY, async (link) => {
-						if (isExpired()) {
-							response.timedOut = true;
-							return;
-						}
-
-						try {
-							let details = null;
-							for (let attempt = 1; attempt <= DETAIL_RETRY_ATTEMPTS; attempt++) {
-								if (isExpired()) {
-									response.timedOut = true;
-									break;
-								}
-
-								const detailTimeout = Math.min(
-									DETAIL_TIMEOUT_MS,
-									getRemainingTime(deadlineAt, DETAIL_TIMEOUT_MS),
-								);
-								details = await withTimeout(
-									scraper.extractJobDetails(link),
-									detailTimeout,
-									`Timeout extrayendo detalle en ${sourceName}`,
-								);
-								if (!details) {
-									continue;
-								}
-
-								if (hasMeaningfulDescription(details)) {
-									break;
-								}
-
-								if (attempt < DETAIL_RETRY_ATTEMPTS) {
-									await delay(250 * attempt);
-								}
-							}
-
-							if (!details) {
-								if (response.timedOut) {
-									metrics.skipped += 1;
-									return;
-								}
-								metrics.failed += 1;
-								return;
-							}
-
-							const payload = toTrabajoPayload(details, sourceName, this.programs);
-							const candidates = [
-								payload.urlOriginal,
-								normalizeUrl(link),
-								link,
-							].filter(Boolean);
-
-							const exists = await this.jobRepository.findBySourceAndUrls(
-								sourceName,
-								candidates,
-							);
-							if (exists) {
-								metrics.skipped += 1;
-								return;
-							}
-
-							await this.jobRepository.create(payload);
-							metrics.inserted += 1;
-							this.lastRun.insertedSoFar += 1;
-						} catch (error) {
-							if (isExpired()) {
-								response.timedOut = true;
-								metrics.skipped += 1;
-								return;
-							}
-							metrics.failed += 1;
-							metrics.errors.push(error.message);
-						}
-					}, () => isExpired());
-				} catch (error) {
-					metrics.errors.push(`[${term}] ${error.message}`);
-				}
-			}
-
-			return { sourceName, metrics };
-			}),
-		);
-
-		for (const { sourceName, metrics } of sourceResults) {
-			response.totalLinks += metrics.links;
-			response.totalInserted += metrics.inserted;
-			response.totalSkipped += metrics.skipped;
-			response.totalFailed += metrics.failed;
-			response.sources[sourceName] = metrics;
+			response.totalLinks += sourceResult.metrics.links;
+			response.totalInserted += sourceResult.metrics.inserted;
+			response.totalSkipped += sourceResult.metrics.skipped;
+			response.totalFailed += sourceResult.metrics.failed;
+			response.sources[sourceName] = sourceResult.metrics;
+			response.timedOut = response.timedOut || sourceResult.timedOut;
 		}
 
 		const finishedAt = new Date();
@@ -284,14 +183,114 @@ export class ScrapingService {
 		};
 	}
 
-	async startScrapingAllPrograms({ sources, linksPerSource }) {
-		if (!Array.isArray(this.programs) || this.programs.length === 0) {
-			await this.loadPrograms();
+	async processSource({ sourceName, searchTerms, linksPerTermPerSource, seenUrls, isExpired }) {
+		const scraper = this.scraperFactory.getScraper(sourceName);
+		if (!scraper?.isAvailable()) {
+			return {
+				timedOut: false,
+				metrics: {
+					links: 0,
+					inserted: 0,
+					skipped: 0,
+					failed: 0,
+					success: false,
+					errors: ["Fuente no disponible o en cooldown"],
+					searchTermsUsed: searchTerms,
+				},
+			};
 		}
+
+		const metrics = {
+			links: 0,
+			inserted: 0,
+			skipped: 0,
+			failed: 0,
+			success: true,
+			errors: [],
+			searchTermsUsed: searchTerms,
+			policy: scraper.getPolicy?.() || null,
+		};
+
+		const discovered = await this.discoveryService.discover({
+			scraper,
+			sourceName,
+			searchTerms,
+			limitPerTerm: linksPerTermPerSource,
+			isExpired,
+			deduplicationService: this.deduplicationService,
+			seenUrls,
+		});
+
+		metrics.links = discovered.links.length;
+		metrics.errors.push(...discovered.errors);
+
+		const extracted = await this.extractionService.processLinks({
+			scraper,
+			sourceName,
+			links: discovered.links,
+			isExpired,
+			onInserted: () => {
+				this.lastRun.insertedSoFar += 1;
+			},
+		});
+
+		metrics.inserted += extracted.inserted;
+		metrics.skipped += extracted.skipped;
+		metrics.failed += extracted.failed;
+		metrics.errors.push(...extracted.errors);
+		metrics.success = scraper.isAvailable() && metrics.failed === 0;
+
+		if (!scraper.isAvailable()) {
+			metrics.success = false;
+			metrics.errors.push("Fuente pausada por bloqueo detectado");
+		}
+
+		return {
+			timedOut: isExpired(),
+			metrics,
+		};
+	}
+
+	async startScrapingAllPrograms({ sources, linksPerSource }) {
+		await this.ensureProgramsLoaded();
 
 		const activePrograms = dedupeProgramsByName(this.programs).filter(
 			(program) => program?.activo !== false,
 		);
+
+		if (activePrograms.length === 0) {
+			const startedAt = new Date();
+			const finishedAt = new Date();
+			this.lastRun = {
+				status: "idle",
+				startedAt,
+				finishedAt,
+				message: "No hay programas activos disponibles en ms-jobs para ejecutar allPrograms.",
+				totals: {
+					links: 0,
+					inserted: 0,
+					skipped: 0,
+					failed: 1,
+					timedOut: false,
+				},
+			};
+
+			return {
+				profession: "all-programs",
+				searchTerms: [],
+				startedAt,
+				finishedAt,
+				totalLinks: 0,
+				totalInserted: 0,
+				totalSkipped: 0,
+				totalFailed: 1,
+				timedOut: false,
+				sources: {},
+				programsProcessed: 0,
+				programsTotal: 0,
+				message: "No hay programas activos disponibles en ms-jobs para ejecutar allPrograms.",
+			};
+		}
 
 		const startedAt = new Date();
 		const response = {
@@ -354,7 +353,7 @@ export class ScrapingService {
 						response.sources[sourceName].errors.push(...metrics.errors);
 					}
 				}
-			} catch (error) {
+			} catch (_error) {
 				response.totalFailed += 1;
 			}
 
@@ -381,29 +380,21 @@ export class ScrapingService {
 		};
 	}
 
-	/**
-	 * Construye la lista de términos de búsqueda a partir de profession y/o keywords.
-	 * Selecciona un subconjunto variado para maximizar cobertura sin exceder tiempos.
-	 */
 	buildSearchTerms(profession, keywords) {
 		const terms = [];
 		const seen = new Set();
 
 		const addTerm = (term) => {
-			const normalized = term.trim().toLowerCase();
+			const normalized = String(term || "").trim().toLowerCase();
 			if (normalized && !seen.has(normalized)) {
 				seen.add(normalized);
 				terms.push(normalized);
 			}
 		};
 
-		// 1. El nombre de la profesión/carrera siempre va primero
 		if (profession) addTerm(profession);
 
-		// 2. Agregar keywords adicionales (cargos, sinónimos)
 		if (keywords.length > 0) {
-			// Seleccionar keywords variados: preferir los más cortos y específicos (cargos)
-			// que funcionan mejor como queries de búsqueda en portales de empleo
 			const sorted = [...keywords]
 				.filter((k) => !seen.has(k.trim().toLowerCase()))
 				.sort((a, b) => a.length - b.length);
@@ -414,12 +405,11 @@ export class ScrapingService {
 			}
 		}
 
-		// Fallback: si no hay nada, usar profession tal cual
 		if (terms.length === 0 && profession) {
 			terms.push(profession.trim().toLowerCase());
 		}
 
-		console.log(`[ScrapingService] Términos de búsqueda (${terms.length}):`, terms);
+		console.log(`[ScrapingService] Terminos de busqueda (${terms.length}):`, terms);
 		return terms;
 	}
 
@@ -473,159 +463,4 @@ const dedupeProgramsByName = (programs) => {
 		result.push(program);
 	}
 	return result;
-};
-
-const withTimeout = async (promise, timeoutMs, message) => {
-	let timeoutId;
-	const timeoutPromise = new Promise((_, reject) => {
-		timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
-	});
-	try {
-		return await Promise.race([promise, timeoutPromise]);
-	} finally {
-		clearTimeout(timeoutId);
-	}
-};
-
-const delay = (ms) =>
-	new Promise((resolve) => {
-		setTimeout(resolve, ms);
-	});
-
-const hasMeaningfulDescription = (details) => {
-	if (!details) return false;
-	const raw = details.description || details.descripcion;
-	if (!raw) return false;
-	const normalized = String(raw).trim().toLowerCase();
-	if (!normalized) return false;
-	if (normalized === "sin descripcion") return false;
-	return normalized.length >= 40;
-};
-
-const runWithConcurrency = async (items, concurrency, worker, shouldStop = null) => {
-	const queue = [...items];
-	const runners = Array.from({ length: Math.max(1, concurrency) }, async () => {
-		while (queue.length > 0) {
-			if (typeof shouldStop === "function" && shouldStop()) {
-				return;
-			}
-
-			const item = queue.shift();
-			if (item === undefined) {
-				return;
-			}
-			await worker(item);
-		}
-	});
-	await Promise.all(runners);
-};
-
-const getRemainingTime = (deadlineAt, fallbackMs) => {
-	const remaining = deadlineAt - Date.now();
-	if (!Number.isFinite(remaining) || remaining <= 0) {
-		return 1;
-	}
-	return Math.max(1, Math.min(remaining, fallbackMs));
-};
-
-const parseSalaryRange = (salaryText) => {
-	if (!salaryText || typeof salaryText !== "string") {
-		return { salarioMin: null, salarioMax: null };
-	}
-
-	const matches = salaryText.match(/[\d.,]+/g) || [];
-	const values = matches
-		.map((item) => item.replace(/\./g, "").replace(/,/g, "."))
-		.map((item) => Number(item))
-		.filter((item) => Number.isFinite(item));
-
-	if (values.length === 0) {
-		return { salarioMin: null, salarioMax: null };
-	}
-
-	if (values.length === 1) {
-		return { salarioMin: values[0], salarioMax: null };
-	}
-
-	return {
-		salarioMin: Math.min(...values),
-		salarioMax: Math.max(...values),
-	};
-};
-
-const inferModalidad = (text) => {
-	if (!text || typeof text !== "string") {
-		return null;
-	}
-
-	const normalized = normalizeSearchText(text);
-	if (
-		normalized.includes("hibrid") ||
-		normalized.includes("hybrid") ||
-		normalized.includes("mixto") ||
-		normalized.includes("semi presencial")
-	) {
-		return "HIBRIDO";
-	}
-	if (
-		normalized.includes("remoto") ||
-		normalized.includes("remote") ||
-		normalized.includes("teletrabajo") ||
-		normalized.includes("home office") ||
-		normalized.includes("work from home") ||
-		normalized.includes("wfh") ||
-		normalized.includes("virtual")
-	) {
-		return "REMOTO";
-	}
-	if (
-		normalized.includes("presencial") ||
-		normalized.includes("onsite") ||
-		normalized.includes("on site") ||
-		normalized.includes("en oficina")
-	) {
-		return "PRESENCIAL";
-	}
-
-	return null;
-};
-
-const normalizeSearchText = (value) =>
-	String(value || "")
-		.toLowerCase()
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
-
-const toTrabajoPayload = (details, sourceName, programs) => {
-	const now = new Date();
-	const salary = parseSalaryRange(details.salary);
-	const rawUrl = details.url || details.link || details.urlOriginal;
-	const urlOriginal = normalizeUrl(rawUrl);
-	
-	const titulo = (details.title || details.titulo || "Sin titulo").trim();
-	const descripcion = (details.description || details.descripcion || "Sin descripcion").trim();
-	
-	// Calcular programa relacionado usando programMatcher
-	const programaRelacionado = matchJobToProgram(titulo, descripcion, programs);
-
-	return {
-		titulo,
-		descripcion,
-		empresa: (details.company || details.empresa || "Empresa no especificada").trim(),
-		ubicacion: details.location || details.ubicacion || null,
-		modalidad: inferModalidad(`${details.location || ""} ${details.description || ""}`),
-		salarioMin: salary.salarioMin,
-		salarioMax: salary.salarioMax,
-		requisitos: null,
-		habilidadesClave: null,
-		fuente: sourceName,
-		urlOriginal,
-		scrapingId: null,
-		programaRelacionado,
-		activo: true,
-		fechaCreacion: now,
-		actualizadoEn: now,
-	};
 };

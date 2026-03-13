@@ -1,0 +1,401 @@
+:root {
+  --bg: #f3efe6;
+  --bg-2: #e6dfcf;
+  --panel: rgba(255, 251, 245, 0.88);
+  --panel-strong: #fffdf8;
+  --text: #1f2a2a;
+  --muted: #5d6862;
+  --line: rgba(31, 42, 42, 0.12);
+  --accent: #0e8f73;
+  --accent-2: #f28f3b;
+  --danger: #a63c32;
+  --shadow: 0 24px 80px rgba(40, 50, 45, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(14, 143, 115, 0.18), transparent 26%),
+    radial-gradient(circle at top right, rgba(242, 143, 59, 0.24), transparent 22%),
+    linear-gradient(160deg, var(--bg), var(--bg-2));
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(31, 42, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 42, 42, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), transparent 70%);
+}
+
+.page-shell {
+  width: min(1240px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.02;
+}
+
+h1 {
+  max-width: 14ch;
+  font-size: clamp(2.4rem, 4vw, 4.8rem);
+}
+
+h2 {
+  font-size: 1.5rem;
+}
+
+.hero-copy,
+label span,
+legend,
+.metric-card span {
+  color: var(--muted);
+}
+
+.hero-copy {
+  max-width: 62ch;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+.hero-metrics,
+.status-cards,
+.dashboard-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.hero-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel,
+.metric-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+
+.metric-card {
+  padding: 20px;
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 1.4rem;
+}
+
+.panel {
+  padding: 24px;
+  animation: rise 420ms ease both;
+}
+
+.panel-accent {
+  background: linear-gradient(180deg, rgba(14, 143, 115, 0.14), rgba(255, 251, 245, 0.92));
+}
+
+.panel-wide {
+  grid-column: 1 / -1;
+}
+
+.panel-heading,
+.inline-fields,
+.auth-bar,
+.source-row {
+  display: flex;
+  gap: 12px;
+}
+
+.panel-heading,
+.auth-bar,
+.source-row {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stack-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.slim-form {
+  margin-bottom: 18px;
+}
+
+label,
+fieldset {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid rgba(31, 42, 42, 0.14);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.toggle-field {
+  align-content: end;
+}
+
+.toggle-field input {
+  width: 22px;
+  height: 22px;
+}
+
+.checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+}
+
+.chip input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+  transition: transform 160ms ease, opacity 160ms ease, background 160ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.small-button,
+.danger-button {
+  border-radius: 999px;
+  padding: 12px 18px;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--accent), #085745);
+  color: #f7fbf9;
+}
+
+.secondary-button {
+  background: linear-gradient(135deg, var(--accent-2), #dd6e28);
+  color: #fff7ef;
+}
+
+.ghost-button,
+.small-button {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.danger-button {
+  background: rgba(166, 60, 50, 0.12);
+  color: var(--danger);
+}
+
+.status-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.status-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+}
+
+.status-card strong,
+.source-row strong {
+  display: block;
+  font-size: 1.2rem;
+  margin-top: 8px;
+}
+
+.console-box {
+  margin: 18px 0 0;
+  padding: 16px;
+  min-height: 158px;
+  overflow: auto;
+  border-radius: 18px;
+  background: #1d2625;
+  color: #d8ece7;
+  font-family: "IBM Plex Mono", monospace;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.compact {
+  min-height: 120px;
+}
+
+.auth-bar {
+  margin: 18px 0;
+  align-items: end;
+}
+
+.auth-bar label {
+  flex: 1;
+}
+
+.sources-list {
+  display: grid;
+  gap: 12px;
+}
+
+.source-row {
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.source-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.source-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  background: rgba(14, 143, 115, 0.1);
+  color: #0c6e59;
+}
+
+.pill.off {
+  background: rgba(166, 60, 50, 0.12);
+  color: var(--danger);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 960px) {
+  .hero,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-metrics,
+  .status-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    width: min(100% - 20px, 1240px);
+    padding-top: 18px;
+  }
+
+  .panel,
+  .metric-card {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .inline-fields,
+  .panel-heading,
+  .auth-bar,
+  .source-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  h1 {
+    max-width: 100%;
+  }
+}
