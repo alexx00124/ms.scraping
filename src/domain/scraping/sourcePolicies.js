@@ -55,6 +55,14 @@ const DEFAULT_POLICIES = {
 		useProxy: false,
 		waitUntil: "domcontentloaded",
 	}),
+	computrabajo: new SourcePolicy({
+		source: "computrabajo",
+		discovery: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2400, timeoutMs: 25000 },
+		detail: { concurrency: 1, minDelayMs: 1400, maxDelayMs: 2800, timeoutMs: 26000, retries: 2 },
+		cooldownMs: 30 * 60 * 1000,
+		useProxy: false,
+		waitUntil: "domcontentloaded",
+	}),
 };
 
 export const getSourcePolicy = (sourceName) =>
