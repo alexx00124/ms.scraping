@@ -12,6 +12,7 @@ export const buildRoutes = (scrapingService, scrapingSourceRepository) => {
 	router.post("/scraping/start", controller.start);
 	router.get("/scraping/sources", controller.getSources);
 	router.get("/scraping/status", controller.getStatus);
+	router.get("/scraping/programs", controller.getPrograms);
 
 	// CRUD de fuentes de scraping (admin)
 	router.get("/scraping/sources-db", sourceController.list);
