@@ -2,6 +2,7 @@ import {
 	DEFAULT_LINKS_PER_SOURCE,
 	SCRAPING_SOURCES,
 } from "../domain/scrapingSources.js";
+import { getCareerSearchProfile, listCareerSearchProfiles } from "../domain/careerSearchProfiles.js";
 import { DiscoveryService } from "./services/discoveryService.js";
 import { ExtractionService } from "./services/extractionService.js";
 import { DeduplicationService } from "./services/deduplicationService.js";
@@ -30,6 +31,9 @@ export class ScrapingService {
 			status: "idle",
 			startedAt: null,
 			finishedAt: null,
+			recentJobs: [],
+			recentProfession: null,
+			recentSearchTerms: [],
 			totals: null,
 		};
 
@@ -55,12 +59,15 @@ export class ScrapingService {
 	async loadPrograms() {
 		try {
 			this.programs = await this.academicProgramRepository.listActive();
+			if (!Array.isArray(this.programs) || this.programs.length === 0) {
+				this.programs = listCareerSearchProfiles().map(toProgramShape);
+			}
 			this.normalizationService.setPrograms(this.programs);
 			console.log(`[ScrapingService] Cargados ${this.programs.length} programas academicos`);
 		} catch (error) {
 			console.error("[ScrapingService] Error cargando programas:", error.message);
-			this.programs = [];
-			this.normalizationService.setPrograms([]);
+			this.programs = listCareerSearchProfiles().map(toProgramShape);
+			this.normalizationService.setPrograms(this.programs);
 		}
 	}
 
@@ -79,9 +86,18 @@ export class ScrapingService {
 	getStatus() {
 		return {
 			...this.lastRun,
-			sources: this.getAvailableSources(),
+			programsCount: this.getProgramsCount(),
+			availableSources: this.getAvailableSources(),
 			blockedSources: this.scraperFactory.getBlockedSources(),
 		};
+	}
+
+	getPrograms() {
+		return dedupeProgramsByName(this.programs).map((program) => ({
+			nombre: program?.nombre || null,
+			keywords: Array.isArray(program?.keywords) ? program.keywords : [],
+			activo: program?.activo !== false,
+		}));
 	}
 
 	getProgramsCount() {
@@ -124,6 +140,10 @@ export class ScrapingService {
 			startedAt,
 			finishedAt: null,
 			insertedSoFar: 0,
+			recentJobs: Array.isArray(this.lastRun.recentJobs) ? this.lastRun.recentJobs : [],
+			recentProfession: profession || searchTerms[0] || null,
+			recentSearchTerms: searchTerms,
+			sources: {},
 			totals: null,
 		};
 
@@ -168,6 +188,10 @@ export class ScrapingService {
 			status: "idle",
 			startedAt,
 			finishedAt,
+			recentJobs: this.lastRun.recentJobs || [],
+			recentProfession: response.profession,
+			recentSearchTerms: searchTerms,
+			sources: response.sources,
 			totals: {
 				links: response.totalLinks,
 				inserted: response.totalInserted,
@@ -229,8 +253,14 @@ export class ScrapingService {
 			sourceName,
 			links: discovered.links,
 			isExpired,
+			onExtracted: (payload) => {
+				this.pushRecentJob(payload, "extraida");
+			},
 			onInserted: () => {
 				this.lastRun.insertedSoFar += 1;
+			},
+			onPublished: (payload) => {
+				this.pushRecentJob(payload, "publicada");
 			},
 		});
 
@@ -249,6 +279,23 @@ export class ScrapingService {
 			timedOut: isExpired(),
 			metrics,
 		};
+	}
+
+	pushRecentJob(payload, estado = "extraida") {
+		const snapshot = {
+			titulo: payload?.titulo || null,
+			empresa: payload?.empresa || null,
+			ubicacion: payload?.ubicacion || null,
+			modalidad: payload?.modalidad || null,
+			fuente: payload?.fuente || null,
+			estado,
+			urlOriginal: payload?.urlOriginal || null,
+			programaRelacionado: payload?.programaRelacionado || null,
+			descripcion: String(payload?.descripcion || "").slice(0, 280),
+		};
+
+		const current = Array.isArray(this.lastRun.recentJobs) ? this.lastRun.recentJobs : [];
+		this.lastRun.recentJobs = [snapshot, ...current].slice(0, 18);
 	}
 
 	async startScrapingAllPrograms({ sources, linksPerSource }) {
@@ -312,6 +359,10 @@ export class ScrapingService {
 			startedAt,
 			finishedAt: null,
 			insertedSoFar: 0,
+			recentJobs: Array.isArray(this.lastRun.recentJobs) ? this.lastRun.recentJobs : [],
+			recentProfession: "all-programs",
+			recentSearchTerms: activePrograms.map((program) => program.nombre),
+			sources: {},
 			totals: null,
 		};
 
@@ -365,6 +416,10 @@ export class ScrapingService {
 			status: "idle",
 			startedAt,
 			finishedAt,
+			recentJobs: this.lastRun.recentJobs || [],
+			recentProfession: "all-programs",
+			recentSearchTerms: response.searchTerms,
+			sources: response.sources,
 			totals: {
 				links: response.totalLinks,
 				inserted: response.totalInserted,
@@ -383,6 +438,7 @@ export class ScrapingService {
 	buildSearchTerms(profession, keywords) {
 		const terms = [];
 		const seen = new Set();
+		const profile = getCareerSearchProfile(profession);
 
 		const addTerm = (term) => {
 			const normalized = String(term || "").trim().toLowerCase();
@@ -393,6 +449,13 @@ export class ScrapingService {
 		};
 
 		if (profession) addTerm(profession);
+
+		if (profile?.keywords?.length) {
+			for (const keyword of profile.keywords) {
+				addTerm(keyword);
+				if (terms.length >= MAX_SEARCH_TERMS) break;
+			}
+		}
 
 		if (keywords.length > 0) {
 			const sorted = [...keywords]
@@ -464,3 +527,9 @@ const dedupeProgramsByName = (programs) => {
 	}
 	return result;
 };
+
+const toProgramShape = (profile) => ({
+	nombre: profile.nombre,
+	keywords: Array.isArray(profile.keywords) ? profile.keywords : [],
+	activo: true,
+});
