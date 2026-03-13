@@ -3,7 +3,6 @@
  * Migradas y mejoradas desde feat/smart-search-by-career
  */
 export const SCRAPING_SOURCES = [
-	"spe",
 	"elempleo",
 ];
 
