@@ -4,7 +4,8 @@
  */
 export const SCRAPING_SOURCES = [
 	"acciontrabajo",
-	"faciltrabajo",
+	"spe",
+	"elempleo",
 ];
 
 export const DEFAULT_LINKS_PER_SOURCE = 10;
