@@ -55,6 +55,14 @@ const DEFAULT_POLICIES = {
 		useProxy: false,
 		waitUntil: "domcontentloaded",
 	}),
+	trabajosdiarios: new SourcePolicy({
+		source: "trabajosdiarios",
+		discovery: { concurrency: 1, minDelayMs: 1000, maxDelayMs: 2200, timeoutMs: 25000 },
+		detail: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2600, timeoutMs: 25000, retries: 2 },
+		cooldownMs: 30 * 60 * 1000,
+		useProxy: false,
+		waitUntil: "domcontentloaded",
+	}),
 };
 
 export const getSourcePolicy = (sourceName) =>
