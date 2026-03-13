@@ -4,14 +4,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prisma } from "../adapters/prismaClient.js";
 import { HttpJobsClient } from "../adapters/httpJobsClient.js";
+import { MemoryScrapingSourceRepository } from "../adapters/memoryScrapingSourceRepository.js";
 import { PrismaScrapingSourceRepository } from "../adapters/prismaScrapingSourceRepository.js";
+import { ResilientScrapingSourceRepository } from "../adapters/resilientScrapingSourceRepository.js";
 import { ScraperFactory } from "../adapters/scrapers/scraperFactory.js";
 import { BrowserEngine } from "../adapters/browser/browserEngine.js";
 import { BlockDetector } from "../adapters/scrapers/blockDetector.js";
 import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
-import { AcciontrabajoScraper } from "../adapters/scrapers/sites/acciontrabajoScraper.js";
 import { ElempleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
 import { SpeScraper } from "../adapters/scrapers/sites/speScraper.js";
 
@@ -32,20 +33,25 @@ const academicProgramRepository = {
 	findById: (id) => httpJobsClient.findProgramById(id),
 	findByName: (name) => httpJobsClient.findProgramByName(name),
 };
-const scrapingSourceRepository = new PrismaScrapingSourceRepository(prisma);
 const browserEngine = new BrowserEngine();
 const blockDetector = new BlockDetector();
 
 const scraperFactory = new ScraperFactory();
 scraperFactory.register(
-	"acciontrabajo",
-	new AcciontrabajoScraper({ browserEngine, blockDetector }),
-);
-scraperFactory.register(
 	"elempleo",
 	new ElempleoScraper({ browserEngine, blockDetector }),
 );
 scraperFactory.register("spe", new SpeScraper());
+
+const DEFAULT_SCRAPING_SOURCES = [
+	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
+	{ nombre: "SPE", urlBase: "https://www.buscadordeempleo.gov.co" },
+];
+
+const scrapingSourceRepository = new ResilientScrapingSourceRepository(
+	new PrismaScrapingSourceRepository(prisma),
+	new MemoryScrapingSourceRepository(DEFAULT_SCRAPING_SOURCES),
+);
 
 const scrapingService = new ScrapingService(
 	jobRepository,
@@ -53,12 +59,6 @@ const scrapingService = new ScrapingService(
 	academicProgramRepository,
 	scrapingSourceRepository,
 );
-
-const DEFAULT_SCRAPING_SOURCES = [
-	{ nombre: "AccionTrabajo", urlBase: "https://col.acciontrabajo.com" },
-	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
-	{ nombre: "SPE", urlBase: "https://www.buscadordeempleo.gov.co" },
-];
 
 const ensureDefaultSources = async () => {
 	if (!process.env.DATABASE_URL) {
@@ -99,13 +99,12 @@ const ensureDefaultSources = async () => {
 		}
 
 		for (const source of stale) {
-			if (!source.habilitada) continue;
-			await scrapingSourceRepository.updateById(source.id, { habilitada: false });
+			await scrapingSourceRepository.deleteById(source.id);
 		}
 
 		if (stale.length > 0) {
 			console.log(
-				`[ms-scraping] Fuentes anteriores deshabilitadas: ${stale.length}`,
+				`[ms-scraping] Fuentes anteriores eliminadas: ${stale.length}`,
 			);
 		}
 	} catch (error) {
@@ -131,7 +130,14 @@ function normalizeSourceName(name) {
 app.use(buildRoutes(scrapingService, scrapingSourceRepository));
 
 app.get("/health", (_req, res) => {
-	res.json({ ok: true, service: "ms-scraping" });
+	res.json({
+		ok: true,
+		service: "ms-scraping",
+		dependencies: {
+			msJobs: httpJobsClient.getStatus(),
+			sourcesRepository: scrapingSourceRepository.getStatus(),
+		},
+	});
 });
 
 app.get("/", (_req, res) => {
