@@ -43,14 +43,21 @@ const DEFAULT_POLICIES = {
 	acciontrabajo: new SourcePolicy({
 		source: "acciontrabajo",
 		discovery: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2800, timeoutMs: 22000 },
-		detail: { concurrency: 1, minDelayMs: 1800, maxDelayMs: 4500, timeoutMs: 32000, retries: 2 },
+		detail: { concurrency: 1, minDelayMs: 1800, maxDelayMs: 4500, timeoutMs: 45000, retries: 3 },
 		cooldownMs: 45 * 60 * 1000,
 		useProxy: false,
 	}),
-	faciltrabajo: new SourcePolicy({
-		source: "faciltrabajo",
-		discovery: { concurrency: 1, minDelayMs: 1000, maxDelayMs: 2200, timeoutMs: 20000 },
-		detail: { concurrency: 1, minDelayMs: 1500, maxDelayMs: 3800, timeoutMs: 28000, retries: 2 },
+	spe: new SourcePolicy({
+		source: "spe",
+		discovery: { concurrency: 1, minDelayMs: 250, maxDelayMs: 900, timeoutMs: 15000 },
+		detail: { concurrency: 2, minDelayMs: 100, maxDelayMs: 400, timeoutMs: 8000, retries: 1 },
+		cooldownMs: 20 * 60 * 1000,
+		useProxy: false,
+	}),
+	elempleo: new SourcePolicy({
+		source: "elempleo",
+		discovery: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2400, timeoutMs: 25000 },
+		detail: { concurrency: 1, minDelayMs: 1500, maxDelayMs: 3200, timeoutMs: 30000, retries: 2 },
 		cooldownMs: 30 * 60 * 1000,
 		useProxy: false,
 	}),
