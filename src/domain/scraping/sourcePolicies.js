@@ -1,6 +1,7 @@
 class SourcePolicy {
 	constructor(config = {}) {
 		this.source = config.source || "unknown";
+		this.maxSearchTerms = Number(config.maxSearchTerms || 0);
 		this.discovery = {
 			concurrency: Number(config.discovery?.concurrency || 1),
 			minDelayMs: Number(config.discovery?.minDelayMs || 1000),
@@ -57,8 +58,9 @@ const DEFAULT_POLICIES = {
 	}),
 	trabajosdiarios: new SourcePolicy({
 		source: "trabajosdiarios",
-		discovery: { concurrency: 1, minDelayMs: 1000, maxDelayMs: 2200, timeoutMs: 25000 },
-		detail: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2600, timeoutMs: 25000, retries: 2 },
+		maxSearchTerms: 2,
+		discovery: { concurrency: 1, minDelayMs: 700, maxDelayMs: 1400, timeoutMs: 18000 },
+		detail: { concurrency: 1, minDelayMs: 800, maxDelayMs: 1600, timeoutMs: 18000, retries: 2 },
 		cooldownMs: 30 * 60 * 1000,
 		useProxy: false,
 		waitUntil: "domcontentloaded",
