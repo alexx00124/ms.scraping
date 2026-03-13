@@ -55,6 +55,14 @@ const DEFAULT_POLICIES = {
 		useProxy: false,
 		waitUntil: "domcontentloaded",
 	}),
+	ofertasynegocios: new SourcePolicy({
+		source: "ofertasynegocios",
+		discovery: { concurrency: 1, minDelayMs: 1100, maxDelayMs: 2200, timeoutMs: 22000 },
+		detail: { concurrency: 1, minDelayMs: 1400, maxDelayMs: 2600, timeoutMs: 24000, retries: 2 },
+		cooldownMs: 30 * 60 * 1000,
+		useProxy: false,
+		waitUntil: "domcontentloaded",
+	}),
 };
 
 export const getSourcePolicy = (sourceName) =>
