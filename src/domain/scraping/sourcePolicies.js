@@ -47,6 +47,14 @@ const DEFAULT_POLICIES = {
 		cooldownMs: 30 * 60 * 1000,
 		useProxy: false,
 	}),
+	opcionempleo: new SourcePolicy({
+		source: "opcionempleo",
+		discovery: { concurrency: 1, minDelayMs: 1500, maxDelayMs: 3000, timeoutMs: 30000 },
+		detail: { concurrency: 1, minDelayMs: 2000, maxDelayMs: 4000, timeoutMs: 35000, retries: 2 },
+		cooldownMs: 30 * 60 * 1000,
+		useProxy: false,
+		waitUntil: "domcontentloaded",
+	}),
 };
 
 export const getSourcePolicy = (sourceName) =>
