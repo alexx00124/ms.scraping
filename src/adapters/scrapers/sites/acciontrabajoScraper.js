@@ -22,6 +22,7 @@ export class AcciontrabajoScraper extends BaseBrowserScraper {
 				urls,
 				(href) => looksLikeJobLink(toRelativeOrAbsolute(href, this.baseUrl)),
 				limit,
+				{ preserveHash: true },
 			);
 			const links = found.map((href) => normalizeUrl(toAbsoluteUrl(href, this.baseUrl)));
 
@@ -40,9 +41,59 @@ export class AcciontrabajoScraper extends BaseBrowserScraper {
 				timeoutMs: this.getPolicy().getTimeout("detail"),
 			}, async (page) => {
 				await page.waitForLoadState("domcontentloaded").catch(() => {});
-				await page.waitForTimeout(400).catch(() => {});
+				await page.waitForTimeout(250).catch(() => {});
 
-				const data = await page.evaluate(() => {
+				const data = await page.evaluate((targetUrl) => {
+					const current = new URL(targetUrl);
+					const fragmentId = current.hash.replace(/^#/, "").trim();
+					const text = (value) => String(value || "").replace(/\s+/g, " ").trim() || null;
+
+					const resolveCard = () => {
+						if (!fragmentId) return null;
+						const directCard = document.getElementById(`${fragmentId}-url`);
+						if (directCard) return directCard;
+						const shareNode = document.getElementById(fragmentId);
+						if (shareNode?.closest(".listing_url")) {
+							return shareNode.closest(".listing_url");
+						}
+						const titleNode = document.getElementById(`${fragmentId}-title`);
+						if (titleNode?.closest(".listing_url")) {
+							return titleNode.closest(".listing_url");
+						}
+						return null;
+					};
+
+					const card = resolveCard();
+					if (card) {
+						const descriptionNode = fragmentId
+							? document.getElementById(`${fragmentId}-id`) || card.querySelector("span[id$='-id']")
+							: card.querySelector("span[id$='-id']");
+						const titleNode = fragmentId
+							? document.getElementById(`${fragmentId}-title`) || card.querySelector("h2")
+							: card.querySelector("h2");
+						const locationNode = fragmentId
+							? document.getElementById(`${fragmentId}-city`) || card.querySelector("div[id$='-city']")
+							: card.querySelector("div[id$='-city']");
+
+						const companyCandidate =
+							text(card.querySelector("b")?.textContent) ||
+							text(card.querySelector("strong")?.textContent) ||
+							text(card.querySelector("[itemprop='hiringOrganization']")?.textContent);
+
+						return {
+							title: text(titleNode?.textContent) || document.title || "Sin titulo",
+							company: companyCandidate || "Empresa no especificada",
+							location: text(locationNode?.textContent),
+							description: text(descriptionNode?.textContent) || text(card.textContent) || "Sin descripcion",
+							salary:
+								text(card.querySelector("[itemprop='baseSalary']")?.textContent) ||
+								text(card.querySelector(".salary")?.textContent) ||
+								text(card.textContent)?.match(/\$\s?[\d.,]+(?:\s*a\s*\$\s?[\d.,]+)?/i)?.[0] ||
+								null,
+							pageTitle: document.title || "",
+						};
+					}
+
 					const selectorsToText = (selectors) => {
 						for (const selector of selectors) {
 							const element = document.querySelector(selector);
@@ -97,7 +148,7 @@ export class AcciontrabajoScraper extends BaseBrowserScraper {
 						]),
 						pageTitle: document.title || "",
 					};
-				});
+				}, url);
 
 				return {
 					title: sanitizeTitle(normalizeText(data.title)),
@@ -140,9 +191,12 @@ const looksLikeJobLink = (href) => {
 		href.includes("/empleos-de-") ||
 		href.includes("/ofertas-de-trabajo-en-")
 	) {
-		return false;
+		return /#ec[a-z0-9]+$/i.test(href);
 	}
-	return /^\/trabajo-[^/]+\/.+/i.test(href);
+	if (/^\/trabajo-[^/]+\/.+#ec[a-z0-9]+$/i.test(href)) {
+		return true;
+	}
+	return /^\/empleo-de-[^#]+/i.test(href);
 };
 
 const normalizeText = (value) =>
