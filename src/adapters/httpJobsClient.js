@@ -11,6 +11,7 @@ export class HttpJobsClient {
 		this.baseUrl = process.env.MS_JOBS_URL || "http://localhost:6003";
 		this.gatewaySecret = process.env.GATEWAY_AUTH_SECRET || "";
 		this.timeoutMs = DEFAULT_TIMEOUT_MS;
+		this.lastError = null;
 	}
 
 	// ─── Job ingestion (reemplaza PrismaJobRepository) ───────────────
@@ -23,8 +24,10 @@ export class HttpJobsClient {
 		});
 		if (!response.ok) {
 			const body = await response.json().catch(() => ({}));
+			this.lastError = `ms-jobs ingest failed (${response.status})`;
 			throw new Error(`ms-jobs ingest failed (${response.status}): ${body?.error?.message || "unknown"}`);
 		}
+		this.lastError = null;
 		const result = await response.json();
 		return result.job;
 	}
@@ -37,8 +40,10 @@ export class HttpJobsClient {
 		});
 		if (!response.ok) {
 			const body = await response.json().catch(() => ({}));
+			this.lastError = `ms-jobs batch ingest failed (${response.status})`;
 			throw new Error(`ms-jobs batch ingest failed (${response.status}): ${body?.error?.message || "unknown"}`);
 		}
+		this.lastError = null;
 		const result = await response.json();
 		return result.result;
 	}
@@ -60,6 +65,7 @@ export class HttpJobsClient {
 			const data = await response.json();
 			return data.data || data.items || data || [];
 		} catch (err) {
+			this.lastError = err.message;
 			console.error(`[HttpJobsClient] Error listing programs:`, err.message);
 			return [];
 		}
@@ -77,6 +83,7 @@ export class HttpJobsClient {
 			const data = await response.json();
 			return data.data || data || null;
 		} catch (err) {
+			this.lastError = err.message;
 			console.error(`[HttpJobsClient] Error fetching program ${id}:`, err.message);
 			return null;
 		}
@@ -93,7 +100,7 @@ export class HttpJobsClient {
 		const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
 		try {
-			return await fetch(url, {
+			const response = await fetch(url, {
 				method: options.method || "GET",
 				headers: {
 					"Content-Type": "application/json",
@@ -102,8 +109,20 @@ export class HttpJobsClient {
 				body: options.body || undefined,
 				signal: controller.signal,
 			});
+			this.lastError = null;
+			return response;
+		} catch (error) {
+			this.lastError = error.message;
+			throw error;
 		} finally {
 			clearTimeout(timeoutId);
 		}
+	}
+
+	getStatus() {
+		return {
+			baseUrl: this.baseUrl,
+			lastError: this.lastError,
+		};
 	}
 }
