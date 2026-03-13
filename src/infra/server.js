@@ -14,7 +14,6 @@ import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
 import { ElempleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
-import { SpeScraper } from "../adapters/scrapers/sites/speScraper.js";
 
 const PORT = process.env.PORT || 6006;
 const __filename = fileURLToPath(import.meta.url);
@@ -41,11 +40,9 @@ scraperFactory.register(
 	"elempleo",
 	new ElempleoScraper({ browserEngine, blockDetector }),
 );
-scraperFactory.register("spe", new SpeScraper());
 
 const DEFAULT_SCRAPING_SOURCES = [
 	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
-	{ nombre: "SPE", urlBase: "https://www.buscadordeempleo.gov.co" },
 ];
 
 const scrapingSourceRepository = new ResilientScrapingSourceRepository(
