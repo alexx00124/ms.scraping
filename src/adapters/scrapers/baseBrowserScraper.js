@@ -53,7 +53,7 @@ export class BaseBrowserScraper extends ScraperProvider {
 		);
 	}
 
-	async collectLinksFromUrls(urls, matcher, limit) {
+	async collectLinksFromUrls(urls, matcher, limit, options = {}) {
 		const links = new Set();
 		for (const url of urls) {
 			if (links.size >= limit) break;
@@ -73,7 +73,7 @@ export class BaseBrowserScraper extends ScraperProvider {
 
 			for (const href of found) {
 				if (!matcher(href)) continue;
-				links.add(href.split("#")[0]);
+				links.add(options.preserveHash ? href : href.split("#")[0]);
 				if (links.size >= limit) break;
 			}
 		}
