@@ -12,7 +12,8 @@ import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
 import { AcciontrabajoScraper } from "../adapters/scrapers/sites/acciontrabajoScraper.js";
-import { FaciltrabajoScraper } from "../adapters/scrapers/sites/faciltrabajoScraper.js";
+import { ElempleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
+import { SpeScraper } from "../adapters/scrapers/sites/speScraper.js";
 
 const PORT = process.env.PORT || 6006;
 const __filename = fileURLToPath(import.meta.url);
@@ -41,9 +42,10 @@ scraperFactory.register(
 	new AcciontrabajoScraper({ browserEngine, blockDetector }),
 );
 scraperFactory.register(
-	"faciltrabajo",
-	new FaciltrabajoScraper({ browserEngine, blockDetector }),
+	"elempleo",
+	new ElempleoScraper({ browserEngine, blockDetector }),
 );
+scraperFactory.register("spe", new SpeScraper());
 
 const scrapingService = new ScrapingService(
 	jobRepository,
@@ -54,7 +56,8 @@ const scrapingService = new ScrapingService(
 
 const DEFAULT_SCRAPING_SOURCES = [
 	{ nombre: "AccionTrabajo", urlBase: "https://col.acciontrabajo.com" },
-	{ nombre: "FacilTrabajo", urlBase: "https://www.faciltrabajo.com.co" },
+	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
+	{ nombre: "SPE", urlBase: "https://www.buscadordeempleo.gov.co" },
 ];
 
 const ensureDefaultSources = async () => {
