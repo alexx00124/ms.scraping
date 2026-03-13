@@ -14,6 +14,7 @@ import { ScrapingService } from "../application/scrapingService.js";
 import { buildRoutes } from "../adapters/http/routes.js";
 
 import { ElempleoScraper } from "../adapters/scrapers/sites/elempleoScraper.js";
+import { OfertasYNegociosScraper } from "../adapters/scrapers/sites/ofertasYNegociosScraper.js";
 import { OpcionempleoScraper } from "../adapters/scrapers/sites/opcionempleoScraper.js";
 
 const PORT = process.env.PORT || 6006;
@@ -45,9 +46,14 @@ scraperFactory.register(
 	"opcionempleo",
 	new OpcionempleoScraper({ browserEngine, blockDetector }),
 );
+scraperFactory.register(
+	"ofertasynegocios",
+	new OfertasYNegociosScraper({ browserEngine, blockDetector }),
+);
 
 const DEFAULT_SCRAPING_SOURCES = [
 	{ nombre: "Elempleo", urlBase: "https://www.elempleo.com" },
+	{ nombre: "Ofertas y Negocios", urlBase: "https://ofertasynegocios.co" },
 	{ nombre: "Opcionempleo", urlBase: "https://www.opcionempleo.com.co" },
 ];
 
