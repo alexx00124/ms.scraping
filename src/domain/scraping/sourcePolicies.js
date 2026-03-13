@@ -40,13 +40,6 @@ class SourcePolicy {
 }
 
 const DEFAULT_POLICIES = {
-	spe: new SourcePolicy({
-		source: "spe",
-		discovery: { concurrency: 1, minDelayMs: 250, maxDelayMs: 900, timeoutMs: 15000 },
-		detail: { concurrency: 2, minDelayMs: 100, maxDelayMs: 400, timeoutMs: 8000, retries: 1 },
-		cooldownMs: 20 * 60 * 1000,
-		useProxy: false,
-	}),
 	elempleo: new SourcePolicy({
 		source: "elempleo",
 		discovery: { concurrency: 1, minDelayMs: 1200, maxDelayMs: 2400, timeoutMs: 25000 },
