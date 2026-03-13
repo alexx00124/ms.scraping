@@ -1,16 +1,22 @@
 const healthBadge = document.querySelector("#healthBadge");
+const healthDot = document.querySelector("#healthDot");
 const sourcesCount = document.querySelector("#sourcesCount");
 const insertedSoFar = document.querySelector("#insertedSoFar");
+const linksCount = document.querySelector("#linksCount");
+const programsCount = document.querySelector("#programsCount");
+const heroRunLabel = document.querySelector("#heroRunLabel");
 const sourcesChecklist = document.querySelector("#sourcesChecklist");
 const statusCards = document.querySelector("#statusCards");
 const statusOutput = document.querySelector("#statusOutput");
 const scrapingResponse = document.querySelector("#scrapingResponse");
-const jobResponse = document.querySelector("#jobResponse");
 const sourcesDbResponse = document.querySelector("#sourcesDbResponse");
 const sourcesDbList = document.querySelector("#sourcesDbList");
+const jobsFeed = document.querySelector("#jobsFeed");
+const programsGrid = document.querySelector("#programsGrid");
+const sourceBreakdown = document.querySelector("#sourceBreakdown");
+const runMeta = document.querySelector("#runMeta");
 
 const scrapingForm = document.querySelector("#scrapingForm");
-const jobForm = document.querySelector("#jobForm");
 const sourceForm = document.querySelector("#sourceForm");
 const refreshStatusBtn = document.querySelector("#refreshStatusBtn");
 const reloadSourcesDbBtn = document.querySelector("#reloadSourcesDbBtn");
@@ -23,16 +29,6 @@ const setConsole = (element, value) => {
   element.textContent = typeof value === "string" ? value : formatJson(value);
 };
 
-const buildAdminHeaders = () => {
-  const headers = {};
-  const userId = userIdInput.value.trim();
-  const gatewaySecret = gatewaySecretInput.value.trim();
-
-  if (userId) headers["x-user-id"] = userId;
-  if (gatewaySecret) headers["x-gateway-auth"] = gatewaySecret;
-  return headers;
-};
-
 const api = async (path, options = {}) => {
   const response = await fetch(path, {
     headers: {
@@ -43,25 +39,41 @@ const api = async (path, options = {}) => {
   });
 
   const payload = await response.json().catch(() => ({}));
-
   if (!response.ok) {
     const error = payload?.error?.message || payload?.message || `Request failed: ${response.status}`;
     throw new Error(error);
   }
-
   return payload;
+};
+
+const buildAdminHeaders = () => {
+  const headers = {};
+  const userId = userIdInput.value.trim();
+  const gatewaySecret = gatewaySecretInput.value.trim();
+  if (userId) headers["x-user-id"] = userId;
+  if (gatewaySecret) headers["x-gateway-auth"] = gatewaySecret;
+  return headers;
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 };
 
 const renderAvailableSources = (sources) => {
   sourcesChecklist.innerHTML = "";
+  sourcesCount.textContent = String(Array.isArray(sources) ? sources.length : 0);
 
   if (!Array.isArray(sources) || sources.length === 0) {
-    sourcesChecklist.innerHTML = "<p>No hay fuentes disponibles.</p>";
-    sourcesCount.textContent = "0";
+    sourcesChecklist.innerHTML = "<p class='empty-state'>No hay fuentes disponibles.</p>";
     return;
   }
 
-  sourcesCount.textContent = String(sources.length);
   for (const source of sources) {
     const label = document.createElement("label");
     label.className = "chip";
@@ -100,45 +112,108 @@ const renderStatusCards = (status) => {
     .join("");
 };
 
-const loadHealth = async () => {
-  try {
-    const result = await api("/health", { headers: {} });
-    healthBadge.textContent = result.ok ? "Operativo" : "Sin respuesta";
-  } catch (error) {
-    healthBadge.textContent = "Error";
-  }
+const renderRunMeta = (status) => {
+  const started = formatDateTime(status?.startedAt);
+  const finished = formatDateTime(status?.finishedAt);
+  const profession = status?.recentProfession || "Sin profesion reciente";
+  const terms = Array.isArray(status?.recentSearchTerms) ? status.recentSearchTerms : [];
+
+  heroRunLabel.textContent = `${profession} · inicio ${started}${finished !== "-" ? ` · cierre ${finished}` : ""}`;
+  linksCount.textContent = String(status?.totals?.links ?? 0);
+  insertedSoFar.textContent = String(status?.totals?.inserted ?? status?.insertedSoFar ?? 0);
+  programsCount.textContent = String(status?.programsCount ?? 0);
+
+  runMeta.innerHTML = `
+    <article class="meta-pill"><span>Busqueda</span><strong>${profession}</strong></article>
+    <article class="meta-pill"><span>Inicio</span><strong>${started}</strong></article>
+    <article class="meta-pill"><span>Cierre</span><strong>${finished}</strong></article>
+    <article class="meta-pill"><span>Terminos</span><strong>${terms.join(", ") || "-"}</strong></article>
+  `;
 };
 
-const loadStatus = async () => {
-  try {
-    const result = await api("/scraping/status");
-    const status = result.data || result;
-    renderStatusCards(status);
-    insertedSoFar.textContent = String(status?.insertedSoFar ?? status?.totals?.inserted ?? 0);
-    setConsole(statusOutput, status);
-  } catch (error) {
-    setConsole(statusOutput, error.message);
+const renderSourceBreakdown = (status) => {
+  const sources = Object.entries(status?.sources || {}).filter(([, metrics]) => metrics && typeof metrics === "object" && !Array.isArray(metrics));
+  if (sources.length === 0) {
+    sourceBreakdown.innerHTML = "<p class='empty-state'>Todavia no hay metricas por fuente.</p>";
+    return;
   }
+
+  sourceBreakdown.innerHTML = sources
+    .map(
+      ([name, metrics]) => `
+        <article class="source-card">
+          <div>
+            <strong>${name}</strong>
+            <span>${metrics.success === false ? "Con incidentes" : "Operando"}</span>
+          </div>
+          <ul>
+            <li><span>Links</span><strong>${metrics.links ?? 0}</strong></li>
+            <li><span>Insertadas</span><strong>${metrics.inserted ?? 0}</strong></li>
+            <li><span>Fallidas</span><strong>${metrics.failed ?? 0}</strong></li>
+          </ul>
+        </article>
+      `,
+    )
+    .join("");
 };
 
-const loadAvailableSources = async () => {
-  try {
-    const result = await api("/scraping/sources");
-    const sources = result?.data?.sources || [];
-    renderAvailableSources(sources);
-  } catch (error) {
-    setConsole(scrapingResponse, error.message);
+const renderJobsFeed = (jobs) => {
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    jobsFeed.innerHTML = "<p class='empty-state'>Todavia no hay ofertas visibles. Ejecuta una corrida para llenar este radar.</p>";
+    return;
   }
+
+  jobsFeed.innerHTML = jobs
+    .map(
+      (job) => `
+        <article class="job-card">
+          <div class="job-topline">
+            <span class="source-badge">${job.fuente || "sin fuente"}</span>
+            ${job.modalidad ? `<span class="mode-badge">${job.modalidad}</span>` : ""}
+            ${job.estado ? `<span class="state-badge ${job.estado === "publicada" ? "is-published" : "is-extracted"}">${job.estado}</span>` : ""}
+          </div>
+          <h3>${job.titulo || "Sin titulo"}</h3>
+          <p class="job-company">${job.empresa || "Empresa no especificada"}</p>
+          <p class="job-location">${job.ubicacion || "Ubicacion no reportada"}</p>
+          <p class="job-description">${job.descripcion || "Sin descripcion"}</p>
+          <div class="job-footer">
+            <span>${job.programaRelacionado || "Sin carrera relacionada"}</span>
+            ${job.urlOriginal ? `<a href="${job.urlOriginal}" target="_blank" rel="noreferrer">Ver oferta</a>` : ""}
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+};
+
+const renderPrograms = (programs) => {
+  programsCount.textContent = String(Array.isArray(programs) ? programs.length : 0);
+
+  if (!Array.isArray(programs) || programs.length === 0) {
+    programsGrid.innerHTML = "<p class='empty-state'>No se cargaron programas academicos.</p>";
+    return;
+  }
+
+  programsGrid.innerHTML = programs
+    .slice(0, 18)
+    .map(
+      (program) => `
+        <article class="program-card">
+          <strong>${program.nombre || "Programa"}</strong>
+          <p>${Array.isArray(program.keywords) && program.keywords.length > 0 ? program.keywords.slice(0, 4).join(", ") : "Sin keywords configuradas"}</p>
+        </article>
+      `,
+    )
+    .join("");
 };
 
 const renderSourcesDb = (sources) => {
   if (!Array.isArray(sources) || sources.length === 0) {
-    sourcesDbList.innerHTML = "<p>No hay fuentes configuradas en BD.</p>";
+    sourcesDbList.innerHTML = "<p class='empty-state'>No hay fuentes configuradas en BD.</p>";
     return;
   }
 
   sourcesDbList.innerHTML = "";
-
   for (const source of sources) {
     const article = document.createElement("article");
     article.className = "source-row";
@@ -152,12 +227,55 @@ const renderSourcesDb = (sources) => {
         <button class="small-button" type="button" data-action="toggle" data-id="${source.id}" data-enabled="${String(source.habilitada)}">
           ${source.habilitada ? "Desactivar" : "Activar"}
         </button>
-        <button class="danger-button" type="button" data-action="delete" data-id="${source.id}">
-          Eliminar
-        </button>
+        <button class="danger-button" type="button" data-action="delete" data-id="${source.id}">Eliminar</button>
       </div>
     `;
     sourcesDbList.append(article);
+  }
+};
+
+const loadHealth = async () => {
+  try {
+    const result = await api("/health", { headers: {} });
+    const ok = Boolean(result.ok);
+    healthBadge.textContent = ok ? "Servicio operativo" : "Servicio sin respuesta";
+    healthDot.dataset.state = ok ? "ok" : "error";
+  } catch (_error) {
+    healthBadge.textContent = "Error de conexion";
+    healthDot.dataset.state = "error";
+  }
+};
+
+const loadStatus = async () => {
+  try {
+    const result = await api("/scraping/status");
+    const status = result.data || result;
+    renderStatusCards(status);
+    renderRunMeta(status);
+    renderSourceBreakdown(status);
+    renderJobsFeed(status?.recentJobs || []);
+    setConsole(statusOutput, status);
+  } catch (error) {
+    setConsole(statusOutput, error.message);
+  }
+};
+
+const loadPrograms = async () => {
+  try {
+    const result = await api("/scraping/programs");
+    renderPrograms(result?.data?.items || []);
+  } catch (_error) {
+    programsGrid.innerHTML = "<p class='empty-state'>No fue posible cargar las carreras.</p>";
+  }
+};
+
+const loadAvailableSources = async () => {
+  try {
+    const result = await api("/scraping/status");
+    const sources = result?.data?.availableSources || [];
+    renderAvailableSources(sources);
+  } catch (error) {
+    setConsole(scrapingResponse, error.message);
   }
 };
 
@@ -172,19 +290,17 @@ const loadSourcesDb = async () => {
 
 scrapingForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
   const formData = new FormData(scrapingForm);
   const selectedSources = Array.from(document.querySelectorAll("input[name='source']:checked")).map((input) => input.value);
-  const profession = String(formData.get("profession") || "").trim();
   const keywords = String(formData.get("keywords") || "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
 
   const payload = {
-    profession: profession || undefined,
-    keywords,
-    sources: selectedSources,
+    profession: String(formData.get("profession") || "").trim() || undefined,
+    keywords: keywords.length > 0 ? keywords : undefined,
+    sources: selectedSources.length > 0 ? selectedSources : undefined,
     linksPerSource: Number(formData.get("linksPerSource")) || 8,
     allPrograms: formData.get("allPrograms") === "on",
   };
@@ -195,38 +311,9 @@ scrapingForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload),
     });
     setConsole(scrapingResponse, result);
-    loadStatus();
+    await loadStatus();
   } catch (error) {
     setConsole(scrapingResponse, { error: error.message, payload });
-  }
-});
-
-jobForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formData = new FormData(jobForm);
-
-  const payload = {
-    titulo: String(formData.get("titulo") || "").trim(),
-    descripcion: String(formData.get("descripcion") || "").trim(),
-    empresa: String(formData.get("empresa") || "").trim(),
-    ubicacion: String(formData.get("ubicacion") || "").trim() || null,
-    modalidad: String(formData.get("modalidad") || "").trim() || null,
-    salarioMin: formData.get("salarioMin") ? Number(formData.get("salarioMin")) : null,
-    salarioMax: formData.get("salarioMax") ? Number(formData.get("salarioMax")) : null,
-    fuente: String(formData.get("fuente") || "").trim() || "manual",
-    urlOriginal: String(formData.get("urlOriginal") || "").trim() || null,
-    activo: true,
-  };
-
-  try {
-    const result = await api("/scraping/job", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    setConsole(jobResponse, result);
-    jobForm.reset();
-  } catch (error) {
-    setConsole(jobResponse, { error: error.message, payload });
   }
 });
 
@@ -246,7 +333,7 @@ sourceForm.addEventListener("submit", async (event) => {
     });
     setConsole(sourcesDbResponse, result);
     sourceForm.reset();
-    loadSourcesDb();
+    await loadSourcesDb();
   } catch (error) {
     setConsole(sourcesDbResponse, { error: error.message, payload });
   }
@@ -278,13 +365,17 @@ sourcesDbList.addEventListener("click", async (event) => {
       setConsole(sourcesDbResponse, result);
     }
 
-    loadSourcesDb();
+    await loadSourcesDb();
   } catch (error) {
     setConsole(sourcesDbResponse, error.message);
   }
 });
 
-refreshStatusBtn.addEventListener("click", loadStatus);
+refreshStatusBtn.addEventListener("click", async () => {
+  await Promise.all([loadHealth(), loadStatus(), loadPrograms()]);
+});
+
 reloadSourcesDbBtn.addEventListener("click", loadSourcesDb);
 
-await Promise.all([loadHealth(), loadStatus(), loadAvailableSources(), loadSourcesDb()]);
+await Promise.all([loadHealth(), loadStatus(), loadPrograms(), loadAvailableSources(), loadSourcesDb()]);
+setInterval(loadStatus, 12000);
