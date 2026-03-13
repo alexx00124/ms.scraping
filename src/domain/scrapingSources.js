@@ -5,6 +5,7 @@
 export const SCRAPING_SOURCES = [
 	"elempleo",
 	"opcionempleo",
+	"trabajosdiarios",
 ];
 
 export const DEFAULT_LINKS_PER_SOURCE = 10;
