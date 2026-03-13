@@ -125,7 +125,19 @@ export const buildScrapingController = (scrapingService) => {
 		});
 	};
 
-	return { ingestOne, ingestMany, start, getSources, getStatus };
+	const getPrograms = async (_req, res) => {
+		await scrapingService.ensureProgramsLoaded();
+		const programs = scrapingService.getPrograms();
+		return res.status(200).json({
+			success: true,
+			data: {
+				items: programs,
+				total: programs.length,
+			},
+		});
+	};
+
+	return { ingestOne, ingestMany, start, getSources, getStatus, getPrograms };
 };
 
 const mapPayload = (payload, isCreate) => ({
