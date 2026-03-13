@@ -27,12 +27,12 @@ const CAREER_SEARCH_PROFILES = [
 	{
 		nombre: "Ingenieria de Sistemas",
 		keywords: ["ingenieria de sistemas", "ingeniero de sistemas", "sistemas", "soporte de sistemas"],
-		preferredSources: ["elempleo", "spe"],
+		preferredSources: ["elempleo"],
 	},
 	{
 		nombre: "Ingenieria de Software",
 		keywords: ["ingenieria de software", "desarrollador de software", "software", "developer"],
-		preferredSources: ["elempleo", "spe"],
+		preferredSources: ["elempleo"],
 	},
 	{
 		nombre: "Ingenieria Industrial",
@@ -42,7 +42,7 @@ const CAREER_SEARCH_PROFILES = [
 	{
 		nombre: "Medicina Veterinaria y Zootecnia",
 		keywords: ["medicina veterinaria y zootecnia", "medicina veterinaria", "zootecnia", "veterinaria"],
-		preferredSources: ["spe", "elempleo"],
+		preferredSources: ["elempleo"],
 	},
 	{
 		nombre: "Psicologia",
