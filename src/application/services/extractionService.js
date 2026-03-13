@@ -12,7 +12,7 @@ export class ExtractionService {
 		this.publishingService = publishingService;
 	}
 
-	async processLinks({ scraper, sourceName, links, isExpired, onInserted }) {
+	async processLinks({ scraper, sourceName, links, isExpired, onInserted, onPublished, onExtracted }) {
 		const metrics = {
 			inserted: 0,
 			skipped: 0,
@@ -37,6 +37,10 @@ export class ExtractionService {
 				const payload = this.normalizationService.toTrabajoPayload(details, sourceName);
 				const candidates = [payload.urlOriginal, normalizeUrl(link), link].filter(Boolean);
 
+				if (typeof onExtracted === "function") {
+					onExtracted(payload);
+				}
+
 				const exists = await this.deduplicationService.exists(sourceName, candidates);
 				if (exists) {
 					metrics.skipped += 1;
@@ -47,6 +51,9 @@ export class ExtractionService {
 				metrics.inserted += 1;
 				if (typeof onInserted === "function") {
 					onInserted(payload);
+				}
+				if (typeof onPublished === "function") {
+					onPublished(payload);
 				}
 			} catch (error) {
 				metrics.failed += 1;
