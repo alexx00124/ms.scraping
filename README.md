@@ -101,8 +101,12 @@ Microservicio de scraping e ingesta de ofertas en tabla `Trabajo`.
 
 ## Fuentes soportadas
 
-- acciontrabajo
-- faciltrabajo
+- elempleo
+- opcionempleo
+
+## Documentacion operativa
+
+- Historial de fuentes, descartes y criterio de validacion: `docs/fuentes-scraping.md`
 
 ## Notas
 
